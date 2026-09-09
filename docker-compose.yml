@@ -1,0 +1,53 @@
+# =============================================================================
+# EDIMS — docker-compose.yml
+# Brings up Postgres + the app together. Intended for staging/demo use or as
+# a starting point — for real production, prefer a managed Postgres instance
+# and put a reverse proxy (nginx/Caddy/ALB) in front doing TLS termination,
+# with TRUST_PROXY=true on the app.
+#
+# Usage:
+#   cp .env.example .env            # then fill in real values
+#   docker compose up -d
+#   docker compose exec app node seed-admin.js
+#   docker compose exec app node manage-demo-user.js   # optional, for demos
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: edims
+      POSTGRES_USER: edims
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - edims_pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
+      - ./migration-001.sql:/docker-entrypoint-initdb.d/2-migration.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edims -d edims"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://edims:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/edims
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      NODE_ENV: production
+      PORT: 3000
+      # true only if you put a reverse proxy in front of this container
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./logs:/app/logs
+      - ./public/images/hardware:/app/public/images/hardware
+
+volumes:
+  edims_pgdata:

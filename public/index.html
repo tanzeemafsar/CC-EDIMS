@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<script>
+  // Applied synchronously, before the stylesheet paints, so switching themes
+  // doesn't flash the wrong palette on reload. The rest of the app's JS
+  // (theme toggle button, etc.) lives in the main <script> at the bottom.
+  try {
+    var savedTheme = localStorage.getItem('edims-theme');
+    if (savedTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  } catch (e) { /* localStorage unavailable (private mode etc) — default dark theme is fine */ }
+</script>
+<title>EDIMS — Employee Device Inventory Management</title>
+<style>
+  :root{
+    --bg:        #0b0f19;
+    --panel:     #111827;
+    --panel-2:   #161e2d;
+    --line:      #1f2937;
+    --text:      #e5e9f0;
+    --muted:     #94a3b8;
+    --accent:    #06b6d4;
+    --accent-d:  #0891a8;
+    --assigned:  #10b981;
+    --faulty:    #ef4444;
+    --ordered:   #f59e0b;
+    --danger:    #ef4444;
+    --err-text:  #fca5a5;
+    --radius:    6px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  /* Light theme — toggled via data-theme="light" on <html>, see the topbar
+     sun/moon button. Same variable names throughout the stylesheet, so
+     nothing else needs to change to support both palettes. */
+  html[data-theme="light"]{
+    --bg:        #f6f7fb;
+    --panel:     #ffffff;
+    --panel-2:   #eef1f6;
+    --line:      #dde2ea;
+    --text:      #111827;
+    --muted:     #5b6472;
+    --accent:    #0891a8;
+    --accent-d:  #06b6d4;
+    --assigned:  #059669;
+    --faulty:    #dc2626;
+    --ordered:   #b45309;
+    --danger:    #dc2626;
+    --err-text:  #b91c1c;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); }
+  body{ font-size:14px; line-height:1.5; }
+  ::selection{ background:var(--accent); color:#04141a; }
+  *:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  button{ font-family:inherit; }
+
+  /* ---------- App shell ---------- */
+  #app{ display:none; height:100vh; }
+  #app.show{ display:flex; }
+
+  .rail{
+    width:76px; flex:0 0 auto; background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center;
+    padding:14px 0; gap:4px;
+  }
+  .rail .brand-dot{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--assigned);
+    box-shadow:0 0 0 0 rgba(16,185,129,.6);
+    animation:pulse 2.4s infinite;
+    margin-bottom:18px;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(16,185,129,.55); }
+    70%{ box-shadow:0 0 0 6px rgba(16,185,129,0); }
+    100%{ box-shadow:0 0 0 0 rgba(16,185,129,0); }
+  }
+  .rail button{
+    width:62px; min-height:46px; border-radius:var(--radius);
+    background:transparent; border:1px solid transparent; color:var(--muted);
+    cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; padding:6px 2px; font-size:16px; transition:background .12s, color .12s;
+  }
+  .rail button .rail-label{
+    font-size:9px; font-weight:600; letter-spacing:.03em; text-transform:uppercase;
+    line-height:1;
+  }
+  .rail button .nav-icon{ width:18px; height:18px; flex:none; }
+  .rail button:hover{ background:var(--panel-2); color:var(--text); }
+  .rail button.active{ background:rgba(6,182,212,.12); color:var(--accent); border-color:rgba(6,182,212,.35); }
+  .rail .spacer{ flex:1; }
+  .rail button.logout{ color:var(--faulty); }
+
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+
+  .topbar{
+    height:56px; flex:0 0 auto; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; background:var(--bg);
+  }
+  .topbar .title-block{ display:flex; align-items:baseline; gap:10px; }
+  .topbar h1{ font-size:15px; font-weight:600; margin:0; letter-spacing:.2px; }
+  .topbar .crumb{ color:var(--muted); font-size:12px; font-family:var(--mono); }
+  .who{ display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--muted); }
+  .who .role{
+    font-family:var(--mono); font-size:11px; padding:2px 7px; border-radius:4px;
+    background:rgba(6,182,212,.12); color:var(--accent); border:1px solid rgba(6,182,212,.3);
+  }
+
+  .icon-btn{
+    width:32px; height:32px; border-radius:var(--radius); border:1px solid transparent;
+    background:transparent; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; position:relative;
+    transition:background .12s, color .12s;
+  }
+  .icon-btn:hover{ background:var(--panel-2); color:var(--text); }
+
+  .bell-wrap{ position:relative; }
+  .bell-count{
+    position:absolute; top:2px; right:2px; min-width:14px; height:14px; padding:0 3px;
+    border-radius:8px; background:var(--faulty); color:#fff; font-size:9.5px; font-weight:700;
+    line-height:14px; text-align:center; font-family:var(--mono);
+  }
+  .bell-panel{
+    display:none; position:absolute; top:calc(100% + 8px); right:0; width:300px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:0 10px 30px rgba(0,0,0,.35); z-index:50; overflow:hidden;
+  }
+  .bell-panel.show{ display:block; }
+  .bell-panel-head{
+    padding:10px 12px; font-size:12px; font-weight:600; color:var(--text);
+    border-bottom:1px solid var(--line);
+  }
+  .bell-list{ max-height:280px; overflow-y:auto; }
+  .bell-item{
+    padding:9px 12px; border-bottom:1px solid var(--line); font-size:12.5px; color:var(--text);
+    cursor:pointer;
+  }
+  .bell-item:hover{ background:var(--panel-2); }
+  .bell-item .bi-class{ font-weight:600; }
+  .bell-item .bi-notes{ color:var(--muted); font-size:11.5px; margin-top:2px; }
+  .bell-panel .btn-block{ width:100%; border-radius:0; border:none; border-top:1px solid var(--line); }
+
+  .content{ flex:1; overflow:auto; padding:22px 26px 40px; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ---------- Boot splash ---------- */
+  #boot-splash{
+    position:fixed; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px;
+    background:var(--bg); z-index:100;
+  }
+  #boot-splash .boot-mark{
+    display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600; letter-spacing:.5px;
+  }
+  #boot-splash .boot-mark .dot{ width:9px; height:9px; border-radius:50%; background:var(--accent); animation:pulse 1.1s infinite; }
+  #boot-splash .boot-sub{ color:var(--muted); font-size:12px; font-family:var(--mono); }
+
+  /* ---------- Login ---------- */
+  #login-screen{
+    display:none;
+    position:fixed; inset:0; align-items:center; justify-content:center;
+    background:
+      radial-gradient(circle at 18% 20%, rgba(6,182,212,.07), transparent 40%),
+      radial-gradient(circle at 82% 78%, rgba(16,185,129,.05), transparent 45%),
+      var(--bg);
+  }
+  #login-screen.show{ display:flex; }
+  .login-card{
+    width:340px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:32px 28px; box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .login-card .logo{ display:flex; align-items:center; gap:9px; margin-bottom:4px; }
+  .login-card .logo .dot{ width:9px; height:9px; border-radius:50%; background:var(--accent); animation:pulse 2.4s infinite; }
+  .login-card h2{ font-size:18px; margin:0; letter-spacing:.5px; }
+  .login-card .sub{ color:var(--muted); font-size:12px; margin:2px 0 22px; font-family:var(--mono); }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:11.5px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
+  .field input, .field select, .field textarea{
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    padding:9px 11px; border-radius:var(--radius); font-size:13.5px; font-family:inherit;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ border-color:var(--accent); }
+  .btn{
+    border:1px solid var(--line); background:var(--panel-2); color:var(--text);
+    padding:9px 16px; border-radius:var(--radius); cursor:pointer; font-size:13px; font-weight:500;
+    transition:filter .12s, background .12s;
+  }
+  .btn:hover{ filter:brightness(1.15); }
+  .btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#03161b; font-weight:600; }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-danger{ background:transparent; border-color:rgba(239,68,68,.45); color:var(--faulty); }
+  .btn-danger:hover{ background:rgba(239,68,68,.1); }
+  .btn-block{ width:100%; }
+  .login-card .err{
+    background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.35); color:var(--err-text);
+    font-size:12.5px; padding:8px 10px; border-radius:var(--radius); margin-bottom:14px; display:none;
+  }
+
+  /* ---------- Cards / stats ---------- */
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:22px; }
+  .stat{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; }
+  .stat .v{ font-family:var(--mono); font-size:26px; font-weight:600; line-height:1; }
+  .stat .l{ color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-top:6px; }
+  .stat.assigned .v{ color:var(--assigned); }
+  .stat.faulty .v{ color:var(--faulty); }
+  .stat.ordered .v{ color:var(--ordered); }
+  .stat.accent .v{ color:var(--accent); }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-bottom:20px; }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 16px; border-bottom:1px solid var(--line);
+  }
+  .panel-head h3{ margin:0; font-size:13px; letter-spacing:.3px; }
+  .panel-body{ padding:14px 16px; }
+  .panel-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* ---------- Tables ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{
+    text-align:left; color:var(--muted); font-weight:500; font-size:11px;
+    text-transform:uppercase; letter-spacing:.4px; padding:8px 10px; border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  td{ padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(255,255,255,.02); }
+  .mono{ font-family:var(--mono); font-size:12.5px; }
+  .tbl-wrap{ overflow-x:auto; }
+
+  .badge{
+    display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px;
+    font-weight:600; letter-spacing:.2px; white-space:nowrap;
+  }
+  .badge-Assigned{ background:rgba(16,185,129,.14); color:var(--assigned); }
+  .badge-InHand, .badge-In-Hand{ background:rgba(148,163,184,.16); color:var(--muted); }
+  .badge-Faulty{ background:rgba(239,68,68,.14); color:var(--faulty); }
+  .badge-Ordered{ background:rgba(245,158,11,.14); color:var(--ordered); }
+  .badge-NeedtoOrder, .badge-Need-to-Order{ background:rgba(245,158,11,.08); color:var(--ordered); border:1px dashed rgba(245,158,11,.4); }
+  .badge-Retired{ background:rgba(148,163,184,.08); color:var(--muted); text-decoration:line-through; }
+  .badge-Active{ background:rgba(16,185,129,.14); color:var(--assigned); }
+  .badge-Inactive{ background:rgba(148,163,184,.16); color:var(--muted); }
+  .badge-Offboarded{ background:rgba(239,68,68,.1); color:var(--err-text); }
+  .badge-Verified{ background:rgba(16,185,129,.14); color:var(--assigned); }
+  .badge-Unverified{ background:rgba(148,163,184,.16); color:var(--muted); }
+  .badge-Discrepancy{ background:rgba(239,68,68,.14); color:var(--faulty); }
+
+  .empty{ text-align:center; color:var(--muted); padding:30px 10px; font-size:13px; }
+  .empty.error{ color:var(--err-text); }
+  .empty.error span{ display:block; margin-bottom:8px; }
+  .empty.error .btn{ font-size:11.5px; padding:4px 10px; }
+  .row-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .row-actions button{ font-size:11.5px; padding:4px 9px; }
+
+  .toolbar{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:flex-end; }
+  .toolbar .field{ margin-bottom:0; min-width:140px; }
+  .toolbar .field.grow{ flex:1; min-width:200px; }
+
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  @media (max-width:720px){ .grid-2,.grid-3{ grid-template-columns:1fr; } }
+
+  .pager{ display:flex; align-items:center; gap:10px; justify-content:flex-end; padding:10px 16px; border-top:1px solid var(--line); }
+  .pager span{ color:var(--muted); font-size:12px; font-family:var(--mono); }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal{
+    width:min(480px, 100%); max-height:88vh; overflow:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 24px 70px rgba(0,0,0,.55);
+  }
+  .modal-head{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .modal-head h3{ margin:0; font-size:14px; }
+  .modal-close{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; line-height:1; padding:2px 6px; }
+  .modal-close:hover{ color:var(--text); }
+  .modal-body{ padding:18px; }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:14px 18px; border-top:1px solid var(--line); }
+
+  /* ---------- Toast ---------- */
+  #toast-wrap{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:80; }
+  .toast{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    padding:11px 14px; border-radius:6px; font-size:12.5px; min-width:220px; max-width:340px;
+    box-shadow:0 10px 30px rgba(0,0,0,.4); animation:slidein .18s ease-out;
+  }
+  .toast.ok{ border-left-color:var(--assigned); }
+  .toast.err{ border-left-color:var(--faulty); }
+  @keyframes slidein{ from{ transform:translateX(20px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
+
+  .hint{ color:var(--muted); font-size:12px; margin-top:4px; }
+  .divider{ height:1px; background:var(--line); margin:16px 0; }
+  a.link{ color:var(--accent); text-decoration:none; }
+  a.link:hover{ text-decoration:underline; }
+  .skeleton{ color:var(--muted); font-family:var(--mono); font-size:12.5px; padding:20px; text-align:center; }
+  .skeleton.error{ color:var(--err-text); }
+
+  @media (prefers-reduced-motion: reduce){
+    .rail .brand-dot, .login-card .dot, .toast{ animation:none !important; }
+  }
+
+  @media (max-width:760px){
+    .rail{ width:54px; }
+    .rail button{ width:42px; min-height:42px; padding:0; }
+    .rail button .rail-label{ display:none; }
+    .topbar{ padding:0 14px; }
+    .content{ padding:16px; }
+    .who span.uname{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================== BOOT SPLASH ============================== -->
+<div id="boot-splash">
+  <div class="boot-mark"><span class="dot"></span>EDIMS</div>
+  <div class="boot-sub">Checking session…</div>
+</div>
+
+<!-- ============================== LOGIN ============================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo"><span class="dot"></span><h2>EDIMS</h2></div>
+    <div class="sub">Employee Device Inventory Management</div>
+    <div class="err" id="login-err"></div>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-username">Username</label>
+        <input id="login-username" name="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" id="login-submit">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============================== APP SHELL ============================== -->
+<div id="app">
+  <nav class="rail" id="rail">
+    <div class="brand-dot" title="Session active"></div>
+    <button data-view="dashboard" class="active" title="Dashboard">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8.5V17h10V8.5" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Home</span></button>
+    <button data-view="assets" data-perm="assets:read" title="Assets">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6l7-3.5Z" stroke-linejoin="round"/><path d="M3 6l7 3.5L17 6M10 9.5V17.5" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Assets</span></button>
+    <button data-view="employees" data-perm="employees:read" title="Employees">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="6.5" r="3"/><path d="M3.5 17c1-3.5 4-5 6.5-5s5.5 1.5 6.5 5" stroke-linecap="round"/></svg>
+      <span class="rail-label">People</span></button>
+    <button data-view="assignments" data-perm="assets:read" title="Assignments">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h11m0 0-3-3m3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 13H5m0 0 3 3m-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Assign</span></button>
+    <button data-view="procurement" data-perm="procurement:read" title="Procurement">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h2l1.6 9.2a1.5 1.5 0 0 0 1.5 1.3h6.4a1.5 1.5 0 0 0 1.5-1.2L17 7H6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="17" r="1"/><circle cx="14.5" cy="17" r="1"/></svg>
+      <span class="rail-label">Orders</span></button>
+    <button data-view="audits" data-perm="audits:read" title="Audits">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 16 4.5V9c0 4.2-2.6 6.9-6 8.5C6.6 15.9 4 13.2 4 9V4.5L10 2.5Z" stroke-linejoin="round"/><path d="M7.3 9.6l1.8 1.8 3.6-3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Audits</span></button>
+    <button data-view="hardware" data-perm="assets:read" title="Hardware scraper">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v9m0 0-3-3m3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Scraper</span></button>
+    <button data-view="users" data-perm="users:manage" title="Users">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="6" r="2.4"/><circle cx="14" cy="7.5" r="2"/><path d="M2.5 16c.7-2.8 2.4-4.2 4.5-4.2s3.8 1.4 4.5 4.2M12.7 16c.5-2 1.7-3.2 3.3-3.2s2.8 1.2 3.3 3.2" stroke-linecap="round"/></svg>
+      <span class="rail-label">Users</span></button>
+    <div class="spacer"></div>
+    <button class="logout" id="logout-btn" title="Sign out">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v6" stroke-linecap="round"/><path d="M6 5.5a6 6 0 1 0 8 0" stroke-linecap="round"/></svg>
+      <span class="rail-label">Sign out</span></button>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="title-block">
+        <h1 id="view-title">Dashboard</h1>
+        <span class="crumb" id="view-crumb">/api/dashboard/summary</span>
+      </div>
+      <div class="who">
+        <button class="icon-btn" id="theme-toggle" title="Switch theme" aria-label="Switch theme">
+          <svg id="theme-icon-dark" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M17 10.8A7 7 0 0 1 9.2 3 7 7 0 1 0 17 10.8Z" stroke-linejoin="round"/></svg>
+          <svg id="theme-icon-light" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" style="display:none"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.6v2.1M10 16.3v2.1M18.4 10h-2.1M3.7 10H1.6M15.7 4.3l-1.5 1.5M5.8 14.2l-1.5 1.5M15.7 15.7l-1.5-1.5M5.8 5.8 4.3 4.3" stroke-linecap="round"/></svg>
+        </button>
+        <div class="bell-wrap">
+          <button class="icon-btn" id="bell-btn" title="Alerts" aria-label="Open alerts">
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 8a5 5 0 0 1 10 0c0 3.2 1 4.4 1.6 5.1.3.3.1.9-.4.9H3.8c-.5 0-.7-.6-.4-.9C4 12.4 5 11.2 5 8Z" stroke-linejoin="round"/><path d="M8 16.5a2 2 0 0 0 4 0" stroke-linecap="round"/></svg>
+            <span class="bell-count" id="bell-count" style="display:none">0</span>
+          </button>
+          <div class="bell-panel" id="bell-panel">
+            <div class="bell-panel-head">Open procurement alerts</div>
+            <div id="bell-list" class="bell-list"><div class="hint" style="padding:14px;">No open alerts.</div></div>
+            <button class="btn btn-block" id="bell-view-all">View procurement</button>
+          </div>
+        </div>
+        <span class="uname" id="who-name">—</span>
+        <span class="role" id="who-role">—</span>
+      </div>
+    </div>
+
+    <div class="content" id="content">
+
+      <!-- ---------- DASHBOARD ---------- -->
+      <section class="view active" id="view-dashboard">
+        <div class="stat-grid" id="dash-stats"></div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h3>Inventory by device type</h3></div>
+            <div class="tbl-wrap"><table id="dash-byclass"><thead></thead><tbody></tbody></table></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>Warranties expiring (90 days)</h3></div>
+            <div class="tbl-wrap"><table id="dash-expiring"><thead></thead><tbody></tbody></table></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Recent activity</h3></div>
+          <div class="tbl-wrap"><table id="dash-recent"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- ASSETS ---------- -->
+      <section class="view" id="view-assets">
+        <div class="toolbar">
+          <div class="field grow">
+            <label>Search</label>
+            <input id="assets-search" placeholder="Tag, serial, model, vendor…">
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="assets-status">
+              <option value="">All</option>
+              <option>Assigned</option><option>In-Hand</option><option>Faulty</option>
+              <option>Ordered</option><option>Need to Order</option><option>Retired</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Device Type</label>
+            <select id="assets-class">
+              <option value="">All</option>
+              <option>MacBook</option><option>Laptop</option><option>Monitor</option>
+              <option>Jabra Headset</option><option>Keyboard</option><option>Mouse</option><option>Peripheral</option>
+            </select>
+          </div>
+          <button class="btn" id="assets-filter-btn">Filter</button>
+          <button class="btn btn-primary" id="assets-new-btn" data-perm="assets:write">+ New asset</button>
+          <button class="btn" id="assets-export-csv">Export CSV</button>
+          <button class="btn" id="assets-export-pdf">Export PDF</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="assets-table"><thead></thead><tbody></tbody></table></div>
+          <div class="pager">
+            <span id="assets-count">—</span>
+            <button class="btn" id="assets-prev">&larr; Prev</button>
+            <button class="btn" id="assets-next">Next &rarr;</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- EMPLOYEES ---------- -->
+      <section class="view" id="view-employees">
+        <div class="toolbar">
+          <div class="field grow">
+            <label>Search</label>
+            <input id="emp-search" placeholder="Name, email, employee code…">
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="emp-status">
+              <option value="">All</option><option>Active</option><option>Inactive</option><option>Offboarded</option>
+            </select>
+          </div>
+          <button class="btn" id="emp-filter-btn">Filter</button>
+          <button class="btn btn-primary" id="emp-new-btn" data-perm="employees:write">+ New employee</button>
+          <button class="btn" id="emp-export-csv">Export CSV</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="emp-table"><thead></thead><tbody></tbody></table></div>
+          <div class="pager">
+            <span id="emp-count">—</span>
+            <button class="btn" id="emp-prev">&larr; Prev</button>
+            <button class="btn" id="emp-next">Next &rarr;</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- ASSIGNMENTS ---------- -->
+      <section class="view" id="view-assignments">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="asg-new-btn" data-perm="assignments:write">+ Assign asset</button>
+          <button class="btn" id="asg-export-csv">Export CSV</button>
+          <button class="btn" id="hist-export-csv">Export history CSV</button>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Active assignments</h3></div>
+          <div class="tbl-wrap"><table id="asg-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- PROCUREMENT ---------- -->
+      <section class="view" id="view-procurement">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="proc-new-order-btn" data-perm="procurement:write">+ New order</button>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Stock thresholds</h3></div>
+          <div class="tbl-wrap"><table id="proc-dash"><thead></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Open alerts</h3></div>
+          <div class="tbl-wrap"><table id="proc-alerts"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- AUDITS ---------- -->
+      <section class="view" id="view-audits">
+        <div class="toolbar">
+          <div class="field">
+            <label>Type</label>
+            <select id="audit-type"><option value="">All</option><option>Monthly</option><option>Quarterly</option></select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="audit-status"><option value="">All</option><option>Verified</option><option>Unverified</option><option>Discrepancy</option></select>
+          </div>
+          <button class="btn" id="audit-filter-btn">Filter</button>
+          <button class="btn btn-primary" id="audit-new-btn" data-perm="audits:write">+ Log verification</button>
+          <div class="field">
+            <label>Report range</label>
+            <input type="date" id="audit-from" style="width:130px;display:inline-block;">
+          </div>
+          <div class="field">
+            <input type="date" id="audit-to" style="width:130px;display:inline-block; margin-top:auto;">
+          </div>
+          <button class="btn" id="audit-export-pdf">Export PDF report</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="audit-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- HARDWARE SCRAPER ---------- -->
+      <section class="view" id="view-hardware">
+        <div class="panel">
+          <div class="panel-head"><h3>Scrape a product page</h3></div>
+          <div class="panel-body">
+            <div class="toolbar">
+              <div class="field grow">
+                <label>Public HTTPS URL</label>
+                <input id="scrape-url" placeholder="https://vendor.example.com/product/...">
+              </div>
+              <button class="btn btn-primary" id="scrape-btn" data-perm="assets:write">Scrape specs</button>
+              <button class="btn" id="queue-status-btn">Queue status</button>
+            </div>
+            <div id="scrape-result" class="hint"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Cached hardware images</h3>
+            <button class="btn" id="images-refresh-btn">Refresh</button>
+          </div>
+          <div class="tbl-wrap"><table id="images-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- USERS ---------- -->
+      <section class="view" id="view-users">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="user-new-btn">+ New user</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="users-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================== MODAL ============================== -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">Title</h3>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* =========================================================================
+     CORE DOM REFS (hoisted — needed by the API client's 401 handler below,
+     before the rest of the AUTH section is defined further down)
+     ========================================================================= */
+  const loginScreen = document.getElementById('login-screen');
+  const appShell     = document.getElementById('app');
+  const loginErr     = document.getElementById('login-err');
+  const bootSplash   = document.getElementById('boot-splash');
+
+  function hideBootSplash(){
+    if (bootSplash) bootSplash.remove();
+  }
+
+  /* =========================================================================
+     THEME TOGGLE (dark / light)
+     Persisted in localStorage — this is the user's own app running on their
+     own server, not a Claude-authored chat artifact, so localStorage is the
+     right tool here (unlike in-conversation artifacts, which can't use it).
+     ========================================================================= */
+  const themeToggleBtn = document.getElementById('theme-toggle');
+  const themeIconDark  = document.getElementById('theme-icon-dark');
+  const themeIconLight = document.getElementById('theme-icon-light');
+
+  function applyThemeIcon(){
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    themeIconDark.style.display  = isLight ? '' : 'none';
+    themeIconLight.style.display = isLight ? 'none' : '';
+    themeToggleBtn.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+  }
+  applyThemeIcon();
+
+  themeToggleBtn.addEventListener('click', function(){
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (isLight){
+      document.documentElement.removeAttribute('data-theme');
+      try{ localStorage.setItem('edims-theme', 'dark'); }catch(e){}
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      try{ localStorage.setItem('edims-theme', 'light'); }catch(e){}
+    }
+    applyThemeIcon();
+  });
+
+  /* =========================================================================
+     NOTIFICATION BELL — open procurement alerts
+     Polled alongside the dashboard summary (see POLLING section below) so
+     the count stays current without the user needing to visit Procurement.
+     ========================================================================= */
+  const bellBtn   = document.getElementById('bell-btn');
+  const bellPanel = document.getElementById('bell-panel');
+  const bellCount = document.getElementById('bell-count');
+  const bellList  = document.getElementById('bell-list');
+
+  function renderBellAlerts(alerts){
+    bellCount.textContent = alerts.length;
+    bellCount.style.display = alerts.length ? '' : 'none';
+    if (!alerts.length){
+      bellList.innerHTML = '<div class="hint" style="padding:14px;">No open alerts.</div>';
+      return;
+    }
+    bellList.innerHTML = alerts.slice(0, 20).map(function(a){
+      return '<div class="bell-item" data-goto-procurement="1">' +
+        '<div class="bi-class">' + esc(a.hardware_class) + '</div>' +
+        '<div class="bi-notes">' + esc(a.notes || 'Low stock') + '</div></div>';
+    }).join('');
+  }
+
+  async function refreshBell(){
+    if (!session || !can('procurement:read')) return;
+    try{
+      const d = await get('/api/procurement');
+      renderBellAlerts((d.alerts || []).filter(function(a){ return !a.resolved_at; }));
+    }catch(err){ /* silent — bell shouldn't interrupt whatever the user's doing */ }
+  }
+
+  bellBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    bellPanel.classList.toggle('show');
+  });
+  document.addEventListener('click', function(e){
+    if (!bellPanel.contains(e.target) && e.target !== bellBtn) bellPanel.classList.remove('show');
+  });
+  bellList.addEventListener('click', function(e){
+    if (e.target.closest('[data-goto-procurement]')){
+      bellPanel.classList.remove('show');
+      if (can('procurement:read')) showView('procurement');
+    }
+  });
+  document.getElementById('bell-view-all').addEventListener('click', function(){
+    bellPanel.classList.remove('show');
+    if (can('procurement:read')) showView('procurement');
+  });
+
+  /* =========================================================================
+     API CLIENT
+     All requests are same-origin (CSP: connect-src 'self'), credentials are
+     carried automatically via the edims_sid cookie set by express-session.
+     ========================================================================= */
+  async function api(method, path, body){
+    const opts = { method, headers:{}, credentials:'same-origin' };
+    if (body !== undefined){
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    let res, data;
+    try{
+      res = await fetch(path, opts);
+    }catch(netErr){
+      throw new Error('Network error — is the server reachable?');
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')){
+      data = await res.json().catch(()=>({}));
+    } else {
+      data = {};
+    }
+    if (res.status === 401 && session){
+      // Session expired or was invalidated server-side mid-use. Don't just
+      // toast-and-loop — drop back to the login screen immediately so the
+      // next action the user takes is "log in", not "click the same thing
+      // again and get the same error".
+      session = null;
+      hideBootSplash();
+      appShell.classList.remove('show');
+      loginScreen.classList.add('show');
+      loginErr.textContent = 'Your session expired. Please sign in again.';
+      loginErr.style.display = 'block';
+    }
+    if (!res.ok){
+      const msg = data && data.error ? data.error : ('Request failed (' + res.status + ')');
+      const err = new Error(msg);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+  const get  = (p) => api('GET', p);
+  const post = (p,b) => api('POST', p, b || {});
+  const put  = (p,b) => api('PUT', p, b || {});
+  const del  = (p) => api('DELETE', p);
+
+  // Downloads (CSV/PDF) aren't JSON — hit them as a plain navigation so the
+  // browser handles the Content-Disposition attachment header.
+  function download(path){
+    window.open(path, '_blank');
+  }
+
+  /* =========================================================================
+     TOASTS
+     ========================================================================= */
+  function toast(msg, kind){
+    const wrap = document.getElementById('toast-wrap');
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(()=>{ el.remove(); }, 4200);
+  }
+
+  /* =========================================================================
+     SESSION / RBAC
+     ========================================================================= */
+  const PERMS = {
+    'dashboard:read':    ['Admin','TAC','Viewer'],
+    'employees:read':    ['Admin','TAC','Viewer'],
+    'employees:write':   ['Admin','TAC'],
+    'assets:read':       ['Admin','TAC','Viewer'],
+    'assets:write':      ['Admin','TAC'],
+    'assets:status':     ['Admin','TAC'],
+    'assignments:write': ['Admin','TAC'],
+    'procurement:read':  ['Admin','TAC','Viewer'],
+    'procurement:write': ['Admin','TAC'],
+    'audits:read':       ['Admin','TAC','Viewer'],
+    'audits:write':      ['Admin','TAC'],
+    'users:manage':      ['Admin'],
+  };
+  let session = null; // { id, username, role, loginAt }
+  function can(perm){
+    if (!session) return false;
+    const allowed = PERMS[perm] || [];
+    return allowed.indexOf(session.role) !== -1;
+  }
+  function applyPermissionVisibility(){
+    document.querySelectorAll('[data-perm]').forEach(function(el){
+      el.style.display = can(el.getAttribute('data-perm')) ? '' : 'none';
+    });
+  }
+
+  /* =========================================================================
+     VIEW ROUTER
+     ========================================================================= */
+  const VIEW_META = {
+    dashboard:    { title:'Dashboard',    crumb:'/api/dashboard/summary',  perm:'dashboard:read' },
+    assets:       { title:'Assets',       crumb:'/api/assets',             perm:'assets:read' },
+    employees:    { title:'Employees',    crumb:'/api/employees',          perm:'employees:read' },
+    assignments:  { title:'Assignments',  crumb:'/api/assignments',        perm:'assets:read' },
+    procurement:  { title:'Procurement',  crumb:'/api/procurement',        perm:'procurement:read' },
+    audits:       { title:'Audits',       crumb:'/api/audits',             perm:'audits:read' },
+    hardware:     { title:'Hardware scraper', crumb:'/api/hardware/scrape', perm:'assets:read' },
+    users:        { title:'Users',        crumb:'/api/users',              perm:'users:manage' },
+  };
+  const loaders = {}; // view -> fn() called each time the view is shown
+
+  function showView(name){
+    const meta = VIEW_META[name];
+    if (!meta) return;
+    if (!can(meta.perm)){
+      toast('You do not have access to ' + meta.title + '.', 'err');
+      return;
+    }
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+    const target = document.getElementById('view-' + name);
+    if (target) target.classList.add('active');
+
+    document.querySelectorAll('.rail button[data-view]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-view') === name);
+    });
+    document.getElementById('view-title').textContent = meta.title;
+    document.getElementById('view-crumb').textContent = meta.crumb;
+
+    // Reflect the view in the URL hash so it's deep-linkable and survives
+    // a refresh; guard against re-triggering our own hashchange listener.
+    const hash = '#' + name;
+    if (window.location.hash !== hash){
+      history.pushState(null, '', hash);
+    }
+
+    if (typeof loaders[name] === 'function') loaders[name]();
+  }
+
+  function viewFromHash(){
+    const h = (window.location.hash || '').replace('#', '');
+    return VIEW_META[h] ? h : null;
+  }
+
+  window.addEventListener('popstate', function(){
+    if (!session) return;
+    const v = viewFromHash();
+    if (v && can(VIEW_META[v].perm)) showView(v);
+  });
+
+  document.querySelectorAll('.rail button[data-view]').forEach(function(btn){
+    btn.addEventListener('click', function(){ showView(btn.getAttribute('data-view')); });
+  });
+
+  /* =========================================================================
+     MODAL HELPER
+     ========================================================================= */
+  const modalBackdrop = document.getElementById('modal-backdrop');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody  = document.getElementById('modal-body');
+  const modalFoot  = document.getElementById('modal-foot');
+
+  function openModal(title, bodyHtml, footButtons){
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    modalFoot.innerHTML = '';
+    (footButtons || []).forEach(function(cfg){
+      const b = document.createElement('button');
+      b.className = 'btn ' + (cfg.cls || '');
+      b.textContent = cfg.label;
+      b.addEventListener('click', cfg.onClick);
+      modalFoot.appendChild(b);
+    });
+    modalBackdrop.classList.add('show');
+  }
+  function closeModal(){ modalBackdrop.classList.remove('show'); }
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', function(e){ if (e.target === modalBackdrop) closeModal(); });
+
+  /* =========================================================================
+     SMALL DOM HELPERS
+     ========================================================================= */
+  function esc(s){
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function fmtDate(v){
+    if (!v) return '—';
+    const d = new Date(v);
+    if (isNaN(d)) return esc(v);
+    return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  }
+  function fmtDateTime(v){
+    if (!v) return '—';
+    const d = new Date(v);
+    if (isNaN(d)) return esc(v);
+    return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+  function fmtMoney(v){
+    if (v == null || v === '') return '—';
+    const n = parseFloat(v);
+    return isNaN(n) ? esc(v) : '$' + n.toFixed(2);
+  }
+  function badge(status){
+    if (!status) return '—';
+    const cls = 'badge-' + String(status).replace(/\s+/g,'');
+    return '<span class="badge ' + cls + '">' + esc(status) + '</span>';
+  }
+  function setHead(tableEl, cols){
+    tableEl.querySelector('thead').innerHTML =
+      '<tr>' + cols.map(function(c){ return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+  }
+  function setRows(tableEl, rowsHtml, colSpan, emptyMsg){
+    const tbody = tableEl.querySelector('tbody');
+    if (!rowsHtml.length){
+      tbody.innerHTML = '<tr><td colspan="' + colSpan + '" class="empty">' + esc(emptyMsg || 'No records found.') + '</td></tr>';
+    } else {
+      tbody.innerHTML = rowsHtml.join('');
+    }
+  }
+  // Same shape as setRows, but renders the colspan cell in the error
+  // treatment (red-tinted, with a retry affordance) instead of the neutral
+  // "nothing here yet" empty state — so a failed fetch never looks identical
+  // to a table that's legitimately empty.
+  function setRowsError(tableEl, colSpan, message, retryFn){
+    const tbody = tableEl.querySelector('tbody');
+    const retryBtn = retryFn ? '<button class="btn" data-retry-inline>Retry</button>' : '';
+    tbody.innerHTML = '<tr><td colspan="' + colSpan + '" class="empty error">' +
+      '<span>' + esc(message) + '</span>' + retryBtn + '</td></tr>';
+    if (retryFn){
+      const btn = tbody.querySelector('[data-retry-inline]');
+      if (btn) btn.addEventListener('click', retryFn);
+    }
+  }
+  function field(label, inputHtml){
+    return '<div class="field"><label>' + esc(label) + '</label>' + inputHtml + '</div>';
+  }
+
+  /* =========================================================================
+     AUTH
+     ========================================================================= */
+  const loginForm    = document.getElementById('login-form');
+  const loginSubmit  = document.getElementById('login-submit');
+
+  function enterApp(){
+    hideBootSplash();
+    loginScreen.classList.remove('show');
+    appShell.classList.add('show');
+    document.getElementById('who-name').textContent = session.username;
+    document.getElementById('who-role').textContent = session.role;
+    applyPermissionVisibility();
+    // Land on the URL's hash view if it's valid and permitted; otherwise
+    // fall back to the first view this role can actually see.
+    const order = ['dashboard','assets','employees','assignments','procurement','audits','hardware','users'];
+    const hashView = viewFromHash();
+    const landing = (hashView && can(VIEW_META[hashView].perm))
+      ? hashView
+      : (order.find(function(v){ return can(VIEW_META[v].perm); }) || 'dashboard');
+    showView(landing);
+    startPolling();
+  }
+
+  function exitApp(){
+    session = null;
+    hideBootSplash();
+    appShell.classList.remove('show');
+    loginScreen.classList.add('show');
+    loginForm.reset();
+    stopPolling();
+  }
+
+  // Background polling — keeps the notification bell current everywhere,
+  // and silently refreshes the dashboard's numbers while it's the active
+  // view, without the user needing to switch away and back.
+  let pollTimer = null;
+  function startPolling(){
+    stopPolling();
+    refreshBell();
+    pollTimer = setInterval(function(){
+      if (!session) return;
+      refreshBell();
+      if (document.getElementById('view-dashboard').classList.contains('active')){
+        loaders.dashboard(true);
+      }
+    }, 30000);
+  }
+  function stopPolling(){
+    if (pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function checkSession(){
+    try{
+      const me = await get('/api/auth/me');
+      session = me;
+      enterApp();
+    }catch(e){
+      exitApp();
+    }
+  }
+
+  loginForm.addEventListener('submit', async function(e){
+    e.preventDefault();
+    loginErr.style.display = 'none';
+    loginSubmit.disabled = true;
+    loginSubmit.textContent = 'Signing in…';
+    try{
+      const r = await post('/api/auth/login', {
+        username: document.getElementById('login-username').value,
+        password: document.getElementById('login-password').value,
+      });
+      session = r.user;
+      toast('Welcome back, ' + session.username + '.', 'ok');
+      enterApp();
+    }catch(err){
+      loginErr.textContent = err.message;
+      loginErr.style.display = 'block';
+    }finally{
+      loginSubmit.disabled = false;
+      loginSubmit.textContent = 'Sign in';
+    }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async function(){
+    try{ await post('/api/auth/logout'); }catch(e){ /* ignore */ }
+    toast('Signed out.', 'ok');
+    exitApp();
+  });
+
+  /* =========================================================================
+     DASHBOARD
+     ========================================================================= */
+  loaders.dashboard = async function(silent){
+    const statsWrap = document.getElementById('dash-stats');
+    if (!silent) statsWrap.innerHTML = '<div class="skeleton">Loading dashboard…</div>';
+    try{
+      const d = await get('/api/dashboard/summary');
+      const t = d.totals || {};
+      statsWrap.innerHTML = [
+        ['Total assets', t.total_assets, ''],
+        ['Assigned', t.total_assigned, 'assigned'],
+        ['In-hand', t.total_in_hand, ''],
+        ['Faulty', t.total_faulty, 'faulty'],
+        ['Ordered', t.total_ordered, 'ordered'],
+        ['Need to order', t.total_need_to_order, 'ordered'],
+        ['Open procurement alerts', d.openAlerts, 'accent'],
+      ].map(function(s){
+        return '<div class="stat ' + s[2] + '"><div class="v">' + esc(s[1] == null ? '0' : s[1]) + '</div><div class="l">' + esc(s[0]) + '</div></div>';
+      }).join('');
+
+      const byClassTbl = document.getElementById('dash-byclass');
+      setHead(byClassTbl, ['Device Type','Total','Assigned','In-hand','Faulty','Ordered','Need order','Retired']);
+      setRows(byClassTbl, (d.byClass || []).map(function(r){
+        return '<tr><td>' + esc(r.class) + '</td><td class="mono">' + esc(r.total) + '</td><td class="mono">' + esc(r.assigned) +
+          '</td><td class="mono">' + esc(r.in_hand) + '</td><td class="mono">' + esc(r.faulty) + '</td><td class="mono">' + esc(r.ordered) +
+          '</td><td class="mono">' + esc(r.need_to_order) + '</td><td class="mono">' + esc(r.retired) + '</td></tr>';
+      }), 8, 'No inventory data yet.');
+
+      const expTbl = document.getElementById('dash-expiring');
+      setHead(expTbl, ['Asset tag','Device Type','Model','Warranty expiry']);
+      setRows(expTbl, (d.expiringWarranties || []).map(function(r){
+        return '<tr><td class="mono">' + esc(r.asset_tag) + '</td><td>' + esc(r.hardware_class) + '</td><td>' + esc(r.model) +
+          '</td><td>' + fmtDate(r.warranty_expiry) + '</td></tr>';
+      }), 4, 'Nothing expiring in the next 90 days.');
+
+      const recentTbl = document.getElementById('dash-recent');
+      setHead(recentTbl, ['When','Event','Asset','Employee','Operator','Notes']);
+      setRows(recentTbl, (d.recentActivity || []).map(function(r){
+        return '<tr><td class="mono">' + fmtDateTime(r.created_at) + '</td><td>' + esc(r.event_type) + '</td><td class="mono">' +
+          esc(r.asset_tag) + '</td><td>' + esc(r.employee_name || '—') + '</td><td>' + esc(r.performed_by || '—') +
+          '</td><td>' + esc(r.notes || '—') + '</td></tr>';
+      }), 6, 'No recent activity.');
+    }catch(err){
+      if (silent) return; // background refresh — keep showing last-good data, don't interrupt
+      statsWrap.innerHTML = '<div class="skeleton error">Could not load dashboard — ' + esc(err.message) +
+        '<br><button class="btn" id="dash-retry-btn" style="margin-top:10px;">Retry</button></div>';
+      const retryBtn = document.getElementById('dash-retry-btn');
+      if (retryBtn) retryBtn.addEventListener('click', loaders.dashboard);
+      toast(err.message, 'err');
+    }
+  };
+
+  /* =========================================================================
+     ASSETS
+     ========================================================================= */
+  const VALID_CLASSES = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral'];
+  const VALID_ASSET_STATUS = ['Assigned','In-Hand','Faulty','Ordered','Need to Order'];
+  let assetsOffset = 0;
+  const ASSETS_LIMIT = 50;
+
+  async function loadAssets(){
+    const q = new URLSearchParams();
+    const search = document.getElementById('assets-search').value.trim();
+    const status = document.getElementById('assets-status').value;
+    const cls    = document.getElementById('assets-class').value;
+    if (search) q.set('search', search);
+    if (status) q.set('status', status);
+    if (cls)    q.set('hardware_class', cls);
+    q.set('limit', ASSETS_LIMIT);
+    q.set('offset', assetsOffset);
+
+    const tbl = document.getElementById('assets-table');
+    setHead(tbl, ['Asset tag','Serial','Device Type','Model','Status','Department','Assigned to','Warranty','Actions']);
+    try{
+      const d = await get('/api/assets?' + q.toString());
+      document.getElementById('assets-count').textContent =
+        d.count + ' result' + (d.count === 1 ? '' : 's') + ' · offset ' + assetsOffset;
+      setRows(tbl, d.assets.map(function(a){
+        const actions = [];
+        if (can('assets:write')) actions.push('<button class="btn" data-edit-asset="' + a.id + '">Edit</button>');
+        if (can('assets:status')){
+          if (a.status !== 'Faulty' && a.status !== 'Retired') actions.push('<button class="btn" data-status-asset="' + a.id + '" data-action="mark_faulty">Mark faulty</button>');
+          if (a.status === 'Faulty') actions.push('<button class="btn" data-status-asset="' + a.id + '" data-action="repair">Repair</button>');
+          if (a.status !== 'Assigned' && a.status !== 'Retired') actions.push('<button class="btn" data-status-asset="' + a.id + '" data-action="mark_ordered">Mark ordered</button>');
+          if (a.status !== 'Retired') actions.push('<button class="btn btn-danger" data-status-asset="' + a.id + '" data-action="retire">Retire</button>');
+        }
+        actions.push('<button class="btn" data-history-asset="' + a.id + '">History</button>');
+        return '<tr>' +
+          '<td class="mono">' + esc(a.asset_tag) + '</td>' +
+          '<td class="mono">' + esc(a.serial_number) + '</td>' +
+          '<td>' + esc(a.hardware_class) + '</td>' +
+          '<td>' + esc(a.model) + '</td>' +
+          '<td>' + badge(a.status) + '</td>' +
+          '<td>' + esc(a.location || '—') + '</td>' +
+          '<td>' + esc(a.assigned_to_name || '—') + '</td>' +
+          '<td>' + fmtDate(a.warranty_expiry) + '</td>' +
+          '<td><div class="row-actions">' + actions.join('') + '</div></td>' +
+          '</tr>';
+      }), 9, 'No assets match these filters.');
+    }catch(err){
+      setRowsError(tbl, 9, 'Could not load assets — ' + err.message, loadAssets);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.assets = function(){ assetsOffset = 0; loadAssets(); };
+
+  document.getElementById('assets-filter-btn').addEventListener('click', function(){ assetsOffset = 0; loadAssets(); });
+  document.getElementById('assets-search').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ assetsOffset = 0; loadAssets(); } });
+  document.getElementById('assets-prev').addEventListener('click', function(){ assetsOffset = Math.max(0, assetsOffset - ASSETS_LIMIT); loadAssets(); });
+  document.getElementById('assets-next').addEventListener('click', function(){ assetsOffset += ASSETS_LIMIT; loadAssets(); });
+  document.getElementById('assets-export-csv').addEventListener('click', function(){ download('/api/export/assets.csv'); });
+  document.getElementById('assets-export-pdf').addEventListener('click', function(){ download('/api/export/assets.pdf'); });
+
+  function assetFormHtml(a){
+    a = a || {};
+    return (a.id ? '' : field('Use existing device (optional)',
+        '<select id="f-template"><option value="">— Select to autofill from inventory history —</option></select>' +
+        '<div class="hint">Picks up device type, vendor, model, price and depreciation from a device you already have. Tag, serial and status are still yours to fill in.</div>')) +
+      '<div class="grid-2">' +
+      field('Asset tag*', '<input id="f-asset_tag" value="' + esc(a.asset_tag||'') + '" ' + (a.id?'disabled':'') + '>') +
+      field('Serial number*', '<input id="f-serial_number" value="' + esc(a.serial_number||'') + '" ' + (a.id?'disabled':'') + '>') +
+      field('Device Type*', '<select id="f-hardware_class" ' + (a.id?'disabled':'') + '>' +
+        VALID_CLASSES.map(function(c){ return '<option ' + (a.hardware_class===c?'selected':'') + '>' + c + '</option>'; }).join('') + '</select>') +
+      field('Model*', '<input id="f-model" list="dl-model" value="' + esc(a.model||'') + '"><datalist id="dl-model"></datalist>') +
+      field('Vendor', '<input id="f-vendor" list="dl-vendor" value="' + esc(a.vendor||'') + '"><datalist id="dl-vendor"></datalist>') +
+      field('QR code', '<input id="f-qr_code" value="' + esc(a.qr_code||'') + '">') +
+      field('Status', '<select id="f-status" ' + (a.id?'disabled':'') + '>' +
+        VALID_ASSET_STATUS.map(function(s){
+          const isSelected = a.status ? a.status === s : s === 'In-Hand'; // new assets default to In-Hand, not Assigned — there's no assignment yet
+          return '<option ' + (isSelected?'selected':'') + '>' + s + '</option>';
+        }).join('') + '</select>') +
+      field('Department', '<input id="f-location" value="' + esc(a.location||'') + '">') +
+      field('Purchase price', '<input id="f-purchase_price" type="number" step="0.01" value="' + esc(a.purchase_price||'') + '">') +
+      field('Purchase date', '<input id="f-purchase_date" type="date" value="' + esc((a.purchase_date||'').slice(0,10)) + '">') +
+      field('Warranty expiry', '<input id="f-warranty_expiry" type="date" value="' + esc((a.warranty_expiry||'').slice(0,10)) + '">') +
+      field('Depreciation (yrs)', '<input id="f-depreciation_years" type="number" value="' + esc(a.depreciation_years||'') + '">') +
+      '</div>' + field('Notes', '<textarea id="f-notes" rows="2">' + esc(a.notes||'') + '</textarea>') +
+      (a.id ? '<div class="hint">Asset tag, serial and device type are immutable. Use status actions to change lifecycle state.</div>' : '');
+  }
+
+  // Populates the vendor/model <datalist> suggestions for whatever device
+  // type is currently selected, so retyping "Dell Latitude 5420" from
+  // scratch isn't necessary once it exists anywhere in inventory.
+  async function refreshModelSuggestions(){
+    const classSel = document.getElementById('f-hardware_class');
+    const dlModel  = document.getElementById('dl-model');
+    const dlVendor = document.getElementById('dl-vendor');
+    if (!classSel || !dlModel || !dlVendor) return;
+    try{
+      const d = await get('/api/assets/suggestions?hardware_class=' + encodeURIComponent(classSel.value));
+      const seenModels = new Set(), seenVendors = new Set();
+      let modelOpts = '', vendorOpts = '';
+      (d.suggestions || []).forEach(function(s){
+        if (s.model && !seenModels.has(s.model)){ seenModels.add(s.model); modelOpts += '<option value="' + esc(s.model) + '">'; }
+        if (s.vendor && !seenVendors.has(s.vendor)){ seenVendors.add(s.vendor); vendorOpts += '<option value="' + esc(s.vendor) + '">'; }
+      });
+      dlModel.innerHTML  = modelOpts;
+      dlVendor.innerHTML = vendorOpts;
+    }catch(err){ /* suggestions are a nicety — don't block form use if this fails */ }
+  }
+
+  // Populates the "Use existing device" template dropdown with every
+  // distinct vendor/model combo already in inventory, across all device
+  // types, and wires it to autofill the rest of the form on selection.
+  async function wireAssetTemplateSelect(){
+    const sel = document.getElementById('f-template');
+    if (!sel) return;
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">Loading inventory history…</option>';
+    try{
+      const d = await get('/api/assets/suggestions');
+      const suggestions = d.suggestions || [];
+      sel.innerHTML = '<option value="">— Select to autofill from inventory history —</option>';
+      if (!suggestions.length){
+        sel.innerHTML = '<option value="">No existing devices to suggest yet — this looks like the first of its kind</option>';
+        sel.disabled = false;
+        return;
+      }
+      suggestions.forEach(function(s, i){
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = (s.vendor ? s.vendor + ' ' : '') + s.model + '  ·  ' + s.hardware_class;
+        opt.dataset.class     = s.hardware_class;
+        opt.dataset.vendor    = s.vendor || '';
+        opt.dataset.model     = s.model || '';
+        opt.dataset.price     = s.purchase_price || '';
+        opt.dataset.dep       = s.depreciation_years || '';
+        opt.dataset.location  = s.location || '';
+        opt.dataset.purchase  = s.purchase_date ? String(s.purchase_date).slice(0,10) : '';
+        opt.dataset.warranty  = s.warranty_expiry ? String(s.warranty_expiry).slice(0,10) : '';
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+    }catch(err){
+      sel.innerHTML = '<option value="">Could not load inventory history — ' + esc(err.message) + '</option>';
+      sel.disabled = false;
+    }
+
+    sel.addEventListener('change', function(){
+      const opt = sel.selectedOptions[0];
+      if (!opt || !opt.value) return;
+      // Autofills everything EXCEPT the fields that must be unique per unit:
+      // asset tag, serial number, and QR code stay blank/yours to fill in.
+      document.getElementById('f-hardware_class').value = opt.dataset.class;
+      document.getElementById('f-vendor').value = opt.dataset.vendor;
+      document.getElementById('f-model').value = opt.dataset.model;
+      document.getElementById('f-location').value = opt.dataset.location;
+      if (opt.dataset.price)    document.getElementById('f-purchase_price').value = opt.dataset.price;
+      if (opt.dataset.dep)      document.getElementById('f-depreciation_years').value = opt.dataset.dep;
+      if (opt.dataset.purchase) document.getElementById('f-purchase_date').value = opt.dataset.purchase;
+      if (opt.dataset.warranty) document.getElementById('f-warranty_expiry').value = opt.dataset.warranty;
+      refreshModelSuggestions();
+      toast('Autofilled from ' + opt.textContent + '. Just fill in tag, serial, and status.', 'ok');
+    });
+  }
+
+  document.getElementById('assets-new-btn').addEventListener('click', function(){
+    openModal('New asset', assetFormHtml(), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Create', cls:'btn-primary', onClick: async function(){
+          const body = {
+            asset_tag: document.getElementById('f-asset_tag').value.trim(),
+            serial_number: document.getElementById('f-serial_number').value.trim(),
+            hardware_class: document.getElementById('f-hardware_class').value,
+            model: document.getElementById('f-model').value.trim(),
+            vendor: document.getElementById('f-vendor').value.trim() || null,
+            qr_code: document.getElementById('f-qr_code').value.trim() || null,
+            status: document.getElementById('f-status').value,
+            location: document.getElementById('f-location').value.trim() || null,
+            purchase_price: document.getElementById('f-purchase_price').value || null,
+            purchase_date: document.getElementById('f-purchase_date').value || null,
+            warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
+            depreciation_years: document.getElementById('f-depreciation_years').value || null,
+            notes: document.getElementById('f-notes').value.trim() || null,
+          };
+          try{
+            await post('/api/assets', body);
+            toast('Asset registered.', 'ok');
+            closeModal(); loadAssets();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+    // Wire up the "use existing device" template dropdown and vendor/model
+    // suggestions once the form is actually in the DOM.
+    wireAssetTemplateSelect();
+    refreshModelSuggestions();
+    document.getElementById('f-hardware_class').addEventListener('change', refreshModelSuggestions);
+  });
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const editId = e.target.getAttribute && e.target.getAttribute('data-edit-asset');
+    const statusId = e.target.getAttribute && e.target.getAttribute('data-status-asset');
+    const histId = e.target.getAttribute && e.target.getAttribute('data-history-asset');
+
+    if (editId){
+      try{
+        const d = await get('/api/assets?search=&limit=500'); // fetch then find — keeps a single source of truth from list endpoint
+        const asset = d.assets.find(function(a){ return a.id === editId; }) || {};
+        openModal('Edit asset · ' + asset.asset_tag, assetFormHtml(Object.assign({id:editId}, asset)), [
+          { label:'Cancel', onClick:closeModal },
+          { label:'Save', cls:'btn-primary', onClick: async function(){
+              const body = {
+                model: document.getElementById('f-model').value.trim(),
+                vendor: document.getElementById('f-vendor').value.trim() || null,
+                qr_code: document.getElementById('f-qr_code').value.trim() || null,
+                location: document.getElementById('f-location').value.trim() || null,
+                purchase_price: document.getElementById('f-purchase_price').value || null,
+                purchase_date: document.getElementById('f-purchase_date').value || null,
+                warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
+                depreciation_years: document.getElementById('f-depreciation_years').value || null,
+                notes: document.getElementById('f-notes').value.trim() || null,
+              };
+              try{
+                await put('/api/assets/' + editId, body);
+                toast('Asset updated.', 'ok');
+                closeModal(); loadAssets();
+              }catch(err){ toast(err.message, 'err'); }
+            } },
+        ]);
+        refreshModelSuggestions();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+
+    if (statusId){
+      const action = e.target.getAttribute('data-action');
+      const labelMap = { mark_faulty:'Mark as faulty', repair:'Mark as repaired', mark_ordered:'Mark as ordered', retire:'Retire asset' };
+      openModal(labelMap[action] || action, field('Notes (optional)', '<textarea id="f-status-notes" rows="3"></textarea>'), [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Confirm', cls: action === 'retire' ? 'btn-danger' : 'btn-primary', onClick: async function(){
+            try{
+              await put('/api/assets/' + statusId + '/status', {
+                action: action,
+                notes: document.getElementById('f-status-notes').value.trim() || null,
+              });
+              toast('Status updated.', 'ok');
+              closeModal(); loadAssets();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+      return;
+    }
+
+    if (histId){
+      try{
+        const d = await get('/api/assets/' + histId + '/history');
+        const rows = d.history.map(function(h){
+          return '<tr><td class="mono">' + fmtDateTime(h.created_at) + '</td><td>' + esc(h.event_type) +
+            '</td><td>' + esc(h.old_status || '—') + ' &rarr; ' + esc(h.new_status || '—') +
+            '</td><td>' + esc(h.performed_by_username || '—') + '</td><td>' + esc(h.notes || '—') + '</td></tr>';
+        });
+        openModal('Asset history', '<div class="tbl-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Transition</th><th>Operator</th><th>Notes</th></tr></thead><tbody>' +
+          (rows.length ? rows.join('') : '<tr><td colspan="5" class="empty">No history recorded.</td></tr>') + '</tbody></table></div>',
+          [{ label:'Close', cls:'btn-primary', onClick:closeModal }]);
+      }catch(err){ toast(err.message, 'err'); }
+    }
+  });
+
+  /* =========================================================================
+     EMPLOYEES
+     ========================================================================= */
+  let empOffset = 0;
+  const EMP_LIMIT = 50;
+
+  async function loadEmployees(){
+    const q = new URLSearchParams();
+    const search = document.getElementById('emp-search').value.trim();
+    const status = document.getElementById('emp-status').value;
+    if (search) q.set('search', search);
+    if (status) q.set('status', status);
+    q.set('limit', EMP_LIMIT);
+    q.set('offset', empOffset);
+
+    const tbl = document.getElementById('emp-table');
+    setHead(tbl, ['Code','Name','Email','Department','Designation','Status','Active assets','Actions']);
+    try{
+      const d = await get('/api/employees?' + q.toString());
+      document.getElementById('emp-count').textContent = d.count + ' result' + (d.count === 1 ? '' : 's') + ' · offset ' + empOffset;
+      setRows(tbl, d.employees.map(function(e){
+        const actions = can('employees:write')
+          ? '<button class="btn" data-edit-emp="' + e.id + '">Edit</button>'
+          : '';
+        return '<tr><td class="mono">' + esc(e.employee_code) + '</td><td>' + esc(e.full_name) + '</td><td>' + esc(e.email) +
+          '</td><td>' + esc(e.department || '—') + '</td><td>' + esc(e.designation || '—') + '</td><td>' + badge(e.status) +
+          '</td><td class="mono">' + esc(e.active_assets) + '</td><td>' + actions + '</td></tr>';
+      }), 8, 'No employees match these filters.');
+    }catch(err){
+      setRowsError(tbl, 8, 'Could not load employees — ' + err.message, loadEmployees);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.employees = function(){ empOffset = 0; loadEmployees(); };
+
+  document.getElementById('emp-filter-btn').addEventListener('click', function(){ empOffset = 0; loadEmployees(); });
+  document.getElementById('emp-search').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ empOffset = 0; loadEmployees(); } });
+  document.getElementById('emp-prev').addEventListener('click', function(){ empOffset = Math.max(0, empOffset - EMP_LIMIT); loadEmployees(); });
+  document.getElementById('emp-next').addEventListener('click', function(){ empOffset += EMP_LIMIT; loadEmployees(); });
+  document.getElementById('emp-export-csv').addEventListener('click', function(){ download('/api/export/employees.csv'); });
+
+  function empFormHtml(emp){
+    emp = emp || {};
+    return '<div class="grid-2">' +
+      field('Employee code*', '<input id="f-employee_code" value="' + esc(emp.employee_code||'') + '" ' + (emp.id?'disabled':'') + '>') +
+      field('Full name*', '<input id="f-full_name" value="' + esc(emp.full_name||'') + '">') +
+      field('Email*', '<input id="f-email" type="email" value="' + esc(emp.email||'') + '">') +
+      field('Phone', '<input id="f-phone" value="' + esc(emp.phone||'') + '">') +
+      field('Department', '<input id="f-department" value="' + esc(emp.department||'') + '">') +
+      field('Designation', '<input id="f-designation" value="' + esc(emp.designation||'') + '">') +
+      field('Status', '<select id="f-status">' + ['Active','Inactive','Offboarded'].map(function(s){
+        return '<option ' + (emp.status===s?'selected':'') + '>' + s + '</option>'; }).join('') + '</select>') +
+      field('Join date', '<input id="f-join_date" type="date" value="' + esc((emp.join_date||'').slice(0,10)) + '">') +
+      '</div>' + field('Notes', '<textarea id="f-notes" rows="2">' + esc(emp.notes||'') + '</textarea>');
+  }
+
+  document.getElementById('emp-new-btn').addEventListener('click', function(){
+    openModal('New employee', empFormHtml(), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Create', cls:'btn-primary', onClick: async function(){
+          const body = {
+            employee_code: document.getElementById('f-employee_code').value.trim(),
+            full_name: document.getElementById('f-full_name').value.trim(),
+            email: document.getElementById('f-email').value.trim(),
+            phone: document.getElementById('f-phone').value.trim() || null,
+            department: document.getElementById('f-department').value.trim() || null,
+            designation: document.getElementById('f-designation').value.trim() || null,
+            status: document.getElementById('f-status').value,
+            join_date: document.getElementById('f-join_date').value || null,
+            notes: document.getElementById('f-notes').value.trim() || null,
+          };
+          try{
+            await post('/api/employees', body);
+            toast('Employee created.', 'ok');
+            closeModal(); loadEmployees();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+  });
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const editEmpId = e.target.getAttribute && e.target.getAttribute('data-edit-emp');
+    if (!editEmpId) return;
+    try{
+      const d = await get('/api/employees?limit=500');
+      const emp = d.employees.find(function(x){ return x.id === editEmpId; }) || {};
+      openModal('Edit employee · ' + emp.full_name, empFormHtml(Object.assign({id:editEmpId}, emp)), [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Save', cls:'btn-primary', onClick: async function(){
+            const body = {
+              full_name: document.getElementById('f-full_name').value.trim(),
+              email: document.getElementById('f-email').value.trim(),
+              phone: document.getElementById('f-phone').value.trim() || null,
+              department: document.getElementById('f-department').value.trim() || null,
+              designation: document.getElementById('f-designation').value.trim() || null,
+              status: document.getElementById('f-status').value,
+              join_date: document.getElementById('f-join_date').value || null,
+              notes: document.getElementById('f-notes').value.trim() || null,
+            };
+            try{
+              await put('/api/employees/' + editEmpId, body);
+              toast('Employee updated.', 'ok');
+              closeModal(); loadEmployees();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  /* =========================================================================
+     ASSIGNMENTS
+     ========================================================================= */
+  async function loadAssignments(){
+    const tbl = document.getElementById('asg-table');
+    setHead(tbl, ['Asset tag','Device Type','Model','Employee','Department','Assigned at','Assigned by','Actions']);
+    try{
+      const d = await get('/api/assignments?limit=200');
+      setRows(tbl, d.assignments.map(function(a){
+        const actions = can('assignments:write')
+          ? '<button class="btn btn-danger" data-return-asset="' + a.asset_id + '">Return</button>'
+          : '';
+        return '<tr><td class="mono">' + esc(a.asset_tag) + '</td><td>' + esc(a.hardware_class) + '</td><td>' + esc(a.model) +
+          '</td><td>' + esc(a.full_name) + ' <span class="mono" style="color:var(--muted)">(' + esc(a.employee_code) + ')</span></td><td>' +
+          esc(a.department || '—') + '</td><td class="mono">' + fmtDateTime(a.assigned_at) + '</td><td>' + esc(a.assigned_by_username) +
+          '</td><td>' + actions + '</td></tr>';
+      }), 8, 'No active assignments.');
+    }catch(err){
+      setRowsError(tbl, 8, 'Could not load assignments — ' + err.message, loadAssignments);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.assignments = loadAssignments;
+
+  document.getElementById('asg-export-csv').addEventListener('click', function(){ download('/api/export/assignments.csv'); });
+  document.getElementById('hist-export-csv').addEventListener('click', function(){ download('/api/export/history.csv'); });
+
+  document.getElementById('asg-new-btn').addEventListener('click', async function(){
+    try{
+      const [assetsRes, empRes] = await Promise.all([
+        get('/api/assets?status=In-Hand&limit=500'),
+        get('/api/employees?status=Active&limit=500'),
+      ]);
+      const assetOpts = assetsRes.assets.map(function(a){ return '<option value="' + a.id + '">' + esc(a.asset_tag) + ' — ' + esc(a.model) + '</option>'; }).join('');
+      const empOpts = empRes.employees.map(function(e){ return '<option value="' + e.id + '">' + esc(e.full_name) + ' (' + esc(e.employee_code) + ')</option>'; }).join('');
+      openModal('Assign asset', '<div class="grid-2">' +
+        field('Asset (In-Hand only)', '<select id="f-asset_id"><option value="">Select…</option>' + assetOpts + '</select>') +
+        field('Employee', '<select id="f-employee_id"><option value="">Select…</option>' + empOpts + '</select>') +
+        '</div>' + field('Notes', '<textarea id="f-notes" rows="2"></textarea>'),
+        [
+          { label:'Cancel', onClick:closeModal },
+          { label:'Assign', cls:'btn-primary', onClick: async function(){
+              const asset_id = document.getElementById('f-asset_id').value;
+              const employee_id = document.getElementById('f-employee_id').value;
+              if (!asset_id || !employee_id){ toast('Select both an asset and an employee.', 'err'); return; }
+              try{
+                await post('/api/assignments/create', { asset_id, employee_id, notes: document.getElementById('f-notes').value.trim() || null });
+                toast('Asset assigned.', 'ok');
+                closeModal(); loadAssignments();
+              }catch(err){ toast(err.message, 'err'); }
+            } },
+        ]);
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const assetId = e.target.getAttribute && e.target.getAttribute('data-return-asset');
+    if (!assetId) return;
+    openModal('Return asset', field('Return notes (optional)', '<textarea id="f-return-notes" rows="3"></textarea>'), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Return', cls:'btn-primary', onClick: async function(){
+          try{
+            await post('/api/assignments/return', { asset_id: assetId, notes: document.getElementById('f-return-notes').value.trim() || null });
+            toast('Asset returned.', 'ok');
+            closeModal(); loadAssignments();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+  });
+
+  /* =========================================================================
+     PROCUREMENT
+     ========================================================================= */
+  async function loadProcurement(){
+    const dashTbl = document.getElementById('proc-dash');
+    setHead(dashTbl, ['Device Type','Current stock','Threshold','Status','Open alerts','Latest alert']);
+    const alertTbl = document.getElementById('proc-alerts');
+    setHead(alertTbl, ['Device Type','Created','Notes','Status','Actions']);
+    try{
+      const d = await get('/api/procurement');
+      setRows(dashTbl, d.dashboard.map(function(r){
+        const tCls = r.threshold_status === 'Critical' ? 'faulty' : (r.threshold_status === 'Warning' ? 'ordered' : 'assigned');
+        const thresholdCell = can('procurement:write')
+          ? '<div style="display:flex;gap:6px;align-items:center;">' +
+              '<input type="number" min="0" step="1" value="' + esc(r.threshold_qty == null ? 5 : r.threshold_qty) +
+              '" data-threshold-input="' + esc(r.hardware_class) + '" style="width:64px;">' +
+              '<button class="btn" data-save-threshold="' + esc(r.hardware_class) + '">Save</button></div>'
+          : esc(r.threshold_qty == null ? 5 : r.threshold_qty);
+        return '<tr><td>' + esc(r.hardware_class) + '</td><td class="mono">' + esc(r.current_stock) + '</td><td>' + thresholdCell +
+          '</td><td><span class="badge badge-' + esc(r.threshold_status) +
+          '" style="background:transparent;border:1px solid currentColor;color:var(--' + tCls + ',var(--muted))">' +
+          esc(r.threshold_status) + '</span></td><td class="mono">' + esc(r.open_alerts) + '</td><td class="mono">' + fmtDate(r.latest_alert_date) + '</td></tr>';
+      }), 6, 'No procurement data yet.');
+
+      setRows(alertTbl, d.alerts.map(function(a){
+        const actions = (!a.resolved_at && can('procurement:write'))
+          ? '<button class="btn" data-resolve-alert="' + a.id + '">Resolve</button>'
+          : (a.resolved_at ? '<span class="hint">Resolved by ' + esc(a.resolved_by_username || '—') + '</span>' : '—');
+        return '<tr><td>' + esc(a.hardware_class) + '</td><td class="mono">' + fmtDateTime(a.created_at) + '</td><td>' + esc(a.notes || '—') +
+          '</td><td>' + (a.resolved_at ? badge('Verified') : '<span class="badge badge-Faulty">Open</span>') + '</td><td>' + actions + '</td></tr>';
+      }), 5, 'No procurement alerts.');
+    }catch(err){
+      setRowsError(dashTbl, 6, 'Could not load procurement data — ' + err.message, loadProcurement);
+      setRowsError(alertTbl, 5, 'Could not load alerts — ' + err.message, loadProcurement);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.procurement = loadProcurement;
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const alertId = e.target.getAttribute && e.target.getAttribute('data-resolve-alert');
+    if (alertId){
+      openModal('Resolve alert', field('Notes (optional)', '<textarea id="f-resolve-notes" rows="3"></textarea>'), [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Resolve', cls:'btn-primary', onClick: async function(){
+            try{
+              await put('/api/procurement/' + alertId + '/resolve', { notes: document.getElementById('f-resolve-notes').value.trim() || null });
+              toast('Alert resolved.', 'ok');
+              closeModal(); loadProcurement(); refreshBell();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+      return;
+    }
+
+    const thresholdClass = e.target.getAttribute && e.target.getAttribute('data-save-threshold');
+    if (thresholdClass){
+      const input = document.querySelector('[data-threshold-input="' + CSS.escape(thresholdClass) + '"]');
+      const val = parseInt(input.value, 10);
+      if (!Number.isInteger(val) || val < 0){ toast('Threshold must be a non-negative whole number.', 'err'); return; }
+      try{
+        await put('/api/procurement/thresholds/' + encodeURIComponent(thresholdClass), { threshold_qty: val });
+        toast(esc(thresholdClass) + ' threshold set to ' + val + '.', 'ok');
+        loadProcurement(); refreshBell();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+  });
+
+  document.getElementById('proc-new-order-btn').addEventListener('click', function(){
+    const classOptions = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral']
+      .map(function(c){ return '<option>' + c + '</option>'; }).join('');
+    openModal('New order', ''
+      + field('Device Type*', '<select id="f-order-class">' + classOptions + '</select>')
+      + field('Notes', '<textarea id="f-order-notes" rows="3" placeholder="e.g. Ordering 10 more units — vendor lead time 2 weeks.">Manually requested order.</textarea>'),
+      [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Create order', cls:'btn-primary', onClick: async function(){
+            try{
+              await post('/api/procurement/alerts', {
+                hardware_class: document.getElementById('f-order-class').value,
+                notes: document.getElementById('f-order-notes').value.trim() || null,
+              });
+              toast('Order created.', 'ok');
+              closeModal(); loadProcurement(); refreshBell();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+  });
+
+  /* =========================================================================
+     AUDITS
+     ========================================================================= */
+  async function loadAudits(){
+    const q = new URLSearchParams();
+    const type = document.getElementById('audit-type').value;
+    const status = document.getElementById('audit-status').value;
+    if (type) q.set('audit_type', type);
+    if (status) q.set('verification_status', status);
+    q.set('limit', 100);
+
+    const tbl = document.getElementById('audit-table');
+    setHead(tbl, ['Date','Type','Asset','Employee','Status','Auditor','Notes']);
+    try{
+      const d = await get('/api/audits?' + q.toString());
+      setRows(tbl, d.audits.map(function(a){
+        return '<tr><td class="mono">' + fmtDate(a.audit_date) + '</td><td>' + esc(a.audit_type) + '</td><td class="mono">' + esc(a.asset_tag || '—') +
+          '</td><td>' + esc(a.employee_name || '—') + '</td><td>' + badge(a.verification_status) + '</td><td>' + esc(a.performed_by_username || '—') +
+          '</td><td>' + esc(a.discrepancy_notes || a.notes || '—') + '</td></tr>';
+      }), 7, 'No audit entries match these filters.');
+    }catch(err){
+      setRowsError(tbl, 7, 'Could not load audits — ' + err.message, loadAudits);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.audits = loadAudits;
+
+  document.getElementById('audit-filter-btn').addEventListener('click', loadAudits);
+  document.getElementById('audit-export-pdf').addEventListener('click', function(){
+    const q = new URLSearchParams();
+    const from = document.getElementById('audit-from').value;
+    const to = document.getElementById('audit-to').value;
+    const type = document.getElementById('audit-type').value;
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (type) q.set('type', type);
+    download('/api/export/audit-report.pdf' + (q.toString() ? '?' + q.toString() : ''));
+  });
+
+  document.getElementById('audit-new-btn').addEventListener('click', async function(){
+    try{
+      const [asgRes, assetsRes] = await Promise.all([
+        get('/api/assignments?limit=500'),          // active assignments only (returned_at IS NULL) — the actual "who has what" truth
+        get('/api/assets?limit=500'),
+      ]);
+      const assignedAssetIds = new Set(asgRes.assignments.map(function(x){ return x.asset_id; }));
+      const unassigned = assetsRes.assets.filter(function(a){ return !assignedAssetIds.has(a.id); });
+
+      const assignedOpts = asgRes.assignments.map(function(x){
+        return '<option value="' + x.asset_id + '" data-employee-id="' + x.employee_id + '" data-employee-label="' +
+          esc(x.full_name) + ' (' + esc(x.employee_code) + (x.department ? ', ' + esc(x.department) : '') + ')">' +
+          esc(x.asset_tag) + ' — ' + esc(x.model) + '  →  ' + esc(x.full_name) + '</option>';
+      }).join('');
+      const unassignedOpts = unassigned.map(function(a){
+        return '<option value="' + a.id + '" data-employee-id="" data-employee-label="">' +
+          esc(a.asset_tag) + ' — ' + esc(a.model) + '  (' + esc(a.status) + ', not assigned)</option>';
+      }).join('');
+
+      openModal('Log audit verification', '<div class="grid-2">' +
+        field('Device*', '<select id="f-asset_id">' +
+          '<option value="">Select a device to audit…</option>' +
+          (assignedOpts ? '<optgroup label="Currently assigned">' + assignedOpts + '</optgroup>' : '') +
+          (unassignedOpts ? '<optgroup label="Not currently assigned (in stock / other)">' + unassignedOpts + '</optgroup>' : '') +
+          '</select>' +
+          '<div class="hint">Pick the device you\'re physically checking. Its holder — if any — is filled in automatically from the current assignment record, so there\'s nothing to cross-check by hand.</div>') +
+        field('Employee (auto-filled from assignment)', '<input id="f-employee_display" disabled value="— none, this device isn\'t currently assigned —">' +
+          '<input type="hidden" id="f-employee_id" value="">') +
+        field('Audit type*', '<select id="f-audit_type"><option>Monthly</option><option>Quarterly</option></select>') +
+        field('Result*', '<select id="f-verification_status"><option>Verified</option><option>Unverified</option><option>Discrepancy</option></select>') +
+        '</div>' + field('Notes', '<textarea id="f-notes" rows="2"></textarea>') +
+        field('Discrepancy notes (required if Discrepancy)', '<textarea id="f-discrepancy_notes" rows="2"></textarea>'),
+        [
+          { label:'Cancel', onClick:closeModal },
+          { label:'Log verification', cls:'btn-primary', onClick: async function(){
+              const asset_id = document.getElementById('f-asset_id').value;
+              if (!asset_id){ toast('Select a device.', 'err'); return; }
+              try{
+                await post('/api/audits/verify', {
+                  asset_id,
+                  employee_id: document.getElementById('f-employee_id').value || null,
+                  audit_type: document.getElementById('f-audit_type').value,
+                  verification_status: document.getElementById('f-verification_status').value,
+                  notes: document.getElementById('f-notes').value.trim() || null,
+                  discrepancy_notes: document.getElementById('f-discrepancy_notes').value.trim() || null,
+                });
+                toast('Audit logged.', 'ok');
+                closeModal(); loadAudits();
+              }catch(err){ toast(err.message, 'err'); }
+            } },
+        ]);
+
+      // The employee is derived from whichever device is picked — never
+      // typed or separately selected, so it can't drift out of sync with
+      // who actually has the device right now.
+      document.getElementById('f-asset_id').addEventListener('change', function(){
+        const opt = this.selectedOptions[0];
+        const empId    = opt ? opt.getAttribute('data-employee-id') : '';
+        const empLabel = opt ? opt.getAttribute('data-employee-label') : '';
+        document.getElementById('f-employee_id').value = empId || '';
+        document.getElementById('f-employee_display').value = empId
+          ? empLabel
+          : '— none, this device isn\'t currently assigned —';
+      });
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  /* =========================================================================
+     HARDWARE SCRAPER
+     ========================================================================= */
+  let lastScrape = null;
+  document.getElementById('scrape-btn').addEventListener('click', async function(){
+    const url = document.getElementById('scrape-url').value.trim();
+    const out = document.getElementById('scrape-result');
+    if (!url){ toast('Enter a URL to scrape.', 'err'); return; }
+    out.innerHTML = 'Scraping…';
+    try{
+      const d = await get('/api/hardware/scrape?url=' + encodeURIComponent(url));
+      lastScrape = d.data;
+      const specsCount = d.data.specsCount || 0;
+      out.innerHTML = '<strong>' + esc(d.data.title || 'Untitled') + '</strong> — ' + specsCount + ' spec field(s) found.' +
+        (d.data.image ? ' Image cached: <span class="mono">' + esc(d.data.image.filename) + '</span>' : ' No image cached.') +
+        (can('assets:write') ? '<div style="margin-top:8px;"><button class="btn btn-primary" id="scrape-add-btn">+ Add to inventory</button></div>' : '');
+      toast('Scrape complete.', 'ok');
+      loadImages();
+    }catch(err){
+      out.textContent = '';
+      lastScrape = null;
+      toast(err.message, 'err');
+    }
+  });
+
+  // "+ Add to inventory" — opens the same New Asset modal used elsewhere,
+  // pre-filled from the scraped page instead of a blank form. The scraper
+  // only reads specs off a public product page; it never writes to the
+  // assets table itself, so nothing is added until the user reviews and
+  // hits Create in the modal, same as any other new asset.
+  document.getElementById('scrape-result').addEventListener('click', function(e){
+    if (!e.target.closest('#scrape-add-btn') || !lastScrape) return;
+    let vendorGuess = '';
+    try{ vendorGuess = new URL(lastScrape.sourceUrl).hostname.replace(/^www\./,'').split('.')[0]; }catch(err){}
+    vendorGuess = vendorGuess ? vendorGuess.charAt(0).toUpperCase() + vendorGuess.slice(1) : '';
+    const specsLines = Object.entries(lastScrape.specs || {}).slice(0, 8)
+      .map(function(kv){ return kv[0] + ': ' + kv[1]; }).join('\n');
+    const prefill = {
+      model: (lastScrape.title || '').slice(0, 120),
+      vendor: vendorGuess,
+      status: 'In-Hand',
+      notes: [lastScrape.description, specsLines, 'Source: ' + lastScrape.canonical].filter(Boolean).join('\n\n').slice(0, 1000),
+    };
+    openModal('New asset (from scrape)', assetFormHtml(prefill), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Create', cls:'btn-primary', onClick: async function(){
+          const body = {
+            asset_tag: document.getElementById('f-asset_tag').value.trim(),
+            serial_number: document.getElementById('f-serial_number').value.trim(),
+            hardware_class: document.getElementById('f-hardware_class').value,
+            model: document.getElementById('f-model').value.trim(),
+            vendor: document.getElementById('f-vendor').value.trim() || null,
+            qr_code: document.getElementById('f-qr_code').value.trim() || null,
+            status: document.getElementById('f-status').value,
+            location: document.getElementById('f-location').value.trim() || null,
+            purchase_price: document.getElementById('f-purchase_price').value || null,
+            purchase_date: document.getElementById('f-purchase_date').value || null,
+            warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
+            depreciation_years: document.getElementById('f-depreciation_years').value || null,
+            notes: document.getElementById('f-notes').value.trim() || null,
+          };
+          try{
+            await post('/api/assets', body);
+            toast('Asset registered from scraped page.', 'ok');
+            closeModal(); loadImages();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+    wireAssetTemplateSelect();
+    refreshModelSuggestions();
+    document.getElementById('f-hardware_class').addEventListener('change', refreshModelSuggestions);
+  });
+
+  document.getElementById('queue-status-btn').addEventListener('click', async function(){
+    try{
+      const d = await get('/api/hardware/queue-status');
+      toast('Queue: ' + d.queuedJobs + ' job(s) · rate ' + d.rateLimitMs + 'ms · processing: ' + d.isProcessing, 'ok');
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  async function loadImages(){
+    const tbl = document.getElementById('images-table');
+    setHead(tbl, ['Filename','Size','Cached at','Actions']);
+    try{
+      const d = await get('/api/hardware/images');
+      setRows(tbl, d.images.map(function(img){
+        const actions = can('assets:write')
+          ? '<a class="link" href="' + img.webUrl + '" target="_blank" rel="noopener">View</a> &nbsp; <button class="btn btn-danger" data-del-image="' + esc(img.filename) + '">Delete</button>'
+          : '<a class="link" href="' + img.webUrl + '" target="_blank" rel="noopener">View</a>';
+        return '<tr><td class="mono">' + esc(img.filename) + '</td><td class="mono">' + (Math.round(img.sizeBytes/1024)) + ' KB</td><td class="mono">' +
+          fmtDateTime(img.createdAt) + '</td><td>' + actions + '</td></tr>';
+      }), 4, 'No cached hardware images yet.');
+    }catch(err){
+      setRowsError(tbl, 4, 'Could not load images — ' + err.message, loadImages);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.hardware = loadImages;
+  document.getElementById('images-refresh-btn').addEventListener('click', loadImages);
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const fname = e.target.getAttribute && e.target.getAttribute('data-del-image');
+    if (!fname) return;
+    if (!confirm('Delete cached image "' + fname + '"? This cannot be undone.')) return;
+    try{
+      await del('/api/hardware/images/' + encodeURIComponent(fname));
+      toast('Image deleted.', 'ok');
+      loadImages();
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  /* =========================================================================
+     USERS (Admin only)
+     ========================================================================= */
+  async function loadUsers(){
+    const tbl = document.getElementById('users-table');
+    setHead(tbl, ['Username','Email','Role','Active','Last login','Failed attempts','Actions']);
+    try{
+      const d = await get('/api/users');
+      setRows(tbl, d.users.map(function(u){
+        return '<tr><td>' + esc(u.username) + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td><td>' +
+          (u.is_active ? badge('Active') : badge('Inactive')) + '</td><td class="mono">' + fmtDateTime(u.last_login) + '</td><td class="mono">' +
+          esc(u.failed_login_attempts) + '</td><td style="display:flex;gap:6px;">' +
+          '<button class="btn" data-toggle-user="' + u.id + '">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' +
+          '<button class="btn" data-reset-user="' + u.id + '" data-reset-username="' + esc(u.username) + '">Reset password</button></td></tr>';
+      }), 7, 'No users found.');
+    }catch(err){
+      setRowsError(tbl, 7, 'Could not load users — ' + err.message, loadUsers);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.users = loadUsers;
+
+  document.getElementById('user-new-btn').addEventListener('click', async function(){
+    let roleOpts = '<option value="">Loading roles…</option>';
+    try{
+      const r = await get('/api/roles');
+      roleOpts = r.roles.map(function(role){ return '<option>' + esc(role.name) + '</option>'; }).join('');
+    }catch(e){ roleOpts = ['Admin','TAC','Viewer'].map(function(r){ return '<option>' + r + '</option>'; }).join(''); }
+
+    openModal('New user', '<div class="grid-2">' +
+      field('Username*', '<input id="f-username">') +
+      field('Email*', '<input id="f-email" type="email">') +
+      field('Password* (12+ chars)', '<input id="f-password" type="password">') +
+      field('Role*', '<select id="f-role">' + roleOpts + '</select>') +
+      '</div>', [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Create user', cls:'btn-primary', onClick: async function(){
+            try{
+              await post('/api/users', {
+                username: document.getElementById('f-username').value.trim(),
+                email: document.getElementById('f-email').value.trim(),
+                password: document.getElementById('f-password').value,
+                role: document.getElementById('f-role').value,
+              });
+              toast('User created.', 'ok');
+              closeModal(); loadUsers();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+  });
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const uid = e.target.getAttribute && e.target.getAttribute('data-toggle-user');
+    if (uid){
+      try{
+        await put('/api/users/' + uid + '/toggle-active');
+        toast('User status toggled.', 'ok');
+        loadUsers();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+
+    const resetUid = e.target.getAttribute && e.target.getAttribute('data-reset-user');
+    if (resetUid){
+      const uname = e.target.getAttribute('data-reset-username');
+      openModal('Reset password · ' + uname, field('New password* (12+ chars)', '<input id="f-reset-password" type="password">'), [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Reset password', cls:'btn-primary', onClick: async function(){
+            try{
+              await put('/api/users/' + resetUid + '/reset-password', { new_password: document.getElementById('f-reset-password').value });
+              toast('Password reset for ' + uname + '. Any lockout was also cleared.', 'ok');
+              closeModal(); loadUsers();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+    }
+  });
+
+  /* =========================================================================
+     BOOT
+     ========================================================================= */
+  checkSession();
+
+})();
+</script>
+</body>
+</html>

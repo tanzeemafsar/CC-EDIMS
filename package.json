@@ -1,0 +1,45 @@
+{
+  "name": "edims",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Employee Device Inventory Management System — Production-Grade Enterprise Asset Tracker",
+  "keywords": [],
+  "license": "UNLICENSED",
+  "author": "",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "setup": "bash setup-local.sh",
+    "start": "node server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop edims",
+    "pm2:logs": "pm2 logs edims",
+    "dev": "NODE_ENV=development node --watch server.js",
+    "dev:win": "node --watch server.js",
+    "setup:win": "powershell -ExecutionPolicy Bypass -File setup-local.ps1",
+    "seed-admin": "node seed-admin.js",
+    "demo:reset": "node manage-demo-user.js",
+    "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
+    "db:migrate": "psql \"$DATABASE_URL\" -f migration-001.sql",
+    "db:migrate2": "psql \"$DATABASE_URL\" -f migration-002.sql",
+    "gen-cert": "bash scripts/gen-local-cert.sh"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cheerio": "^1.0.0",
+    "connect-pg-simple": "^9.0.1",
+    "csv-stringify": "^6.5.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "pdfkit": "^0.15.0",
+    "pg": "^8.12.0",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "pm2": "^7.0.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
