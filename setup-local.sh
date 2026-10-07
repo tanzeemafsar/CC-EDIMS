@@ -11,7 +11,7 @@
 #   3. create the database, app role, and privileges (if missing),
 #   4. write a .env with a freshly generated SESSION_SECRET (if missing),
 #   5. npm install (if node_modules is missing),
-#   6. apply schema.sql and migration-001 → 004.sql,
+#   6. apply schema.sql and migration-001 → 005.sql,
 #   7. create the first Admin login (if none exists),
 #   8. tell you how to start the server.
 #
@@ -217,6 +217,14 @@ if [ "$migration4_present" = "t" ]; then
 else
   run_super "$DB_NAME" < migration-004.sql >/dev/null
   c_ok "migration-004.sql applied"
+fi
+
+migration5_present="$(echo "SELECT to_regclass('public.approval_requests') IS NOT NULL;" | run_super "$DB_NAME" -t -A 2>/dev/null | tr -d '[:space:]')"
+if [ "$migration5_present" = "t" ]; then
+  c_info "migration-005.sql already applied (skipping)"
+else
+  run_super "$DB_NAME" < migration-005.sql >/dev/null
+  c_ok "migration-005.sql applied"
 fi
 
 # Grant privileges on everything the schema just created (and for future objects)

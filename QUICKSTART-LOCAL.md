@@ -46,11 +46,11 @@ bash setup-local.sh
 The script is safe to run more than once. It will, only where needed:
 create the `edims_db` database and the `edims_app` role, write a `.env` with a
 freshly generated `SESSION_SECRET`, run `npm install`, apply `schema.sql` and
-`migration-001.sql` → `migration-004.sql`, and create the first Admin login.
+`migration-001.sql` → `migration-005.sql`, and create the first Admin login.
 
 **Upgrading an existing database?** Take a backup, then apply the migrations
 you're missing, in order: `npm run db:migrate2` (if not done yet),
-`npm run db:migrate3`, `npm run db:migrate4`.
+`npm run db:migrate3`, `npm run db:migrate4`, `npm run db:migrate5`.
 
 - **003** replaces the fixed device types with admin-managed categories and
   subcategories (the **Types** screen); existing devices, procurement
@@ -61,6 +61,10 @@ you're missing, in order: `npm run db:migrate2` (if not done yet),
   vendor / department values are collected into the reference lists
   (spellings differing only by case are merged), and the catalogue is seeded
   from the models already in inventory.
+- **005** adds the **Approvals** workflow: chosen actions (by default
+  purchase/order requests, registering, assigning and retiring devices, and
+  issuing invoices) wait for an Admin's approval when a TAC user performs
+  them. Admins switch each rule on or off on the Approvals screen.
 
 Optional settings for invoices and labels (`ORG_NAME`, `ORG_ADDRESS`,
 `DEFAULT_CURRENCY`, `PUBLIC_URL`, `UPLOADS_DIR`) are described in

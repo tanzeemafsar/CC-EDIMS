@@ -55,7 +55,7 @@ const fmtDate = (d) => {
   return new Date(d).toLocaleDateString('en-GB', opts);
 };
 
-module.exports = function invoiceRoutes({ query, withTransaction, checkReference }, can) {
+module.exports = function invoiceRoutes({ query, withTransaction, checkReference }, can, approvals) {
   const router = express.Router();
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -183,7 +183,10 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
            CASE WHEN i.invoice_type = 'Purchase' THEN i.vendor
                 ELSE COALESCE(e.full_name, i.department) END AS party,
            (SELECT COUNT(*) FROM invoice_lines l WHERE l.invoice_id = i.id)::int    AS line_count,
-           (SELECT COUNT(*) FROM invoice_receipts r WHERE r.invoice_id = i.id)::int AS receipt_count
+           (SELECT COUNT(*) FROM invoice_receipts r WHERE r.invoice_id = i.id)::int AS receipt_count,
+           (SELECT ar.request_no FROM approval_requests ar
+             WHERE ar.action = 'invoice.issue' AND ar.status = 'Pending'
+               AND ar.payload->>'invoice_id' = i.id::text LIMIT 1)                  AS pending_request_no
     FROM invoices i
     LEFT JOIN employees e ON e.id = i.employee_id`;
 
@@ -257,7 +260,10 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
       `SELECT i.*, e.full_name AS employee_name, e.employee_code, e.email AS employee_email,
               v.address AS vendor_address, v.email AS vendor_email, v.phone AS vendor_phone,
               ui.username AS issued_by_username, up.username AS paid_by_username,
-              uv.username AS voided_by_username, uc.username AS created_by_username
+              uv.username AS voided_by_username, uc.username AS created_by_username,
+              (SELECT ar.request_no FROM approval_requests ar
+                WHERE ar.action = 'invoice.issue' AND ar.status = 'Pending'
+                  AND ar.payload->>'invoice_id' = i.id::text LIMIT 1) AS pending_request_no
        FROM invoices i
        LEFT JOIN employees e ON e.id = i.employee_id
        LEFT JOIN vendors   v ON v.name = i.vendor
@@ -317,6 +323,8 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
       if (!existing) return res.status(404).json({ error: 'Invoice not found.' });
       if (existing.status !== 'Draft')
         return res.status(409).json({ error: `Invoice ${existing.invoice_number} is ${existing.status} and can no longer be edited.` });
+      const pending = await pendingIssue(id);
+      if (pending) return res.status(409).json({ error: `This draft is awaiting approval to be issued (REQ-${pending}). Cancel that request to edit it.` });
       const p = await prepare(req.body || {}, existing);
       if (p.error) return res.status(400).json({ error: p.error });
       await withTransaction(async (client) => {
@@ -343,6 +351,8 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
     const { id } = req.params;
     if (!isUUID(id)) return res.status(400).json({ error: 'Invalid invoice ID.' });
     try {
+      const pending = await pendingIssue(id);
+      if (pending) return res.status(409).json({ error: `This draft is awaiting approval to be issued (REQ-${pending}). Cancel that request first.` });
       const { rowCount } = await query('DELETE FROM invoices WHERE id=$1', [id]);
       if (!rowCount) return res.status(404).json({ error: 'Invoice not found.' });
       return res.json({ success: true });
@@ -352,9 +362,9 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
   });
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
-  router.post('/:id/issue', can('invoices:write'), async (req, res) => {
-    const { id } = req.params;
-    if (!isUUID(id)) return res.status(400).json({ error: 'Invalid invoice ID.' });
+  // Issuing goes through approval ('invoice.issue'); runIssue is what runs,
+  // either straight away or once an Admin approves.
+  async function runIssue({ invoice_id: id }, ctx) {
     try {
       const result = await withTransaction(async (client) => {
         const { rows: [inv] } = await client.query('SELECT * FROM invoices WHERE id=$1 FOR UPDATE', [id]);
@@ -370,7 +380,7 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
         );
         await client.query(
           `UPDATE invoices SET status='Issued', invoice_number=$1, issued_at=NOW(), issued_by=$2, updated_at=NOW()
-           WHERE id=$3`, [num, req.session.userId, id]);
+           WHERE id=$3`, [num, ctx.userId, id]);
 
         for (const l of lines.filter(x => x.asset_id)) {
           // Purchase invoices fill in a device's purchase price/date if it has none yet
@@ -384,14 +394,49 @@ module.exports = function invoiceRoutes({ query, withTransaction, checkReference
             `INSERT INTO asset_history (asset_id, event_type, old_status, new_status, employee_id, performed_by, notes, metadata)
              SELECT a.id, $1, a.status, a.status, $2, $3, $4, $5 FROM assets a WHERE a.id = $6`,
             [inv.invoice_type === 'Purchase' ? 'Purchase Invoiced' : 'Charged',
-             inv.employee_id, req.session.userId,
-             `${inv.invoice_type === 'Purchase' ? 'Purchased on' : 'Charged on'} invoice ${num}`,
+             inv.employee_id, ctx.userId,
+             `${inv.invoice_type === 'Purchase' ? 'Purchased on' : 'Charged on'} invoice ${num}` + approvals.approvalNote(ctx),
              { invoice_id: id, invoice_number: num }, l.asset_id]);
         }
         return { num };
       });
-      if (result.error) return res.status(result.status).json({ error: result.error });
-      return res.json({ invoice: await loadInvoice(id) });
+      if (result.error) return { status: result.status, body: { error: result.error } };
+      return { status: 200, body: { invoice: await loadInvoice(id) } };
+    } catch (err) {
+      if (err.code === 'P0003') return { status: 409, body: { error: err.message } };
+      console.error('[INVOICES] Issue error:', err.message);
+      return { status: 500, body: { error: 'Failed to issue invoice.' } };
+    }
+  }
+  approvals.register('invoice.issue', runIssue);
+
+  // A draft with an issue request awaiting approval is frozen, so the Admin
+  // approves exactly what they reviewed.
+  async function pendingIssue(id) {
+    const { rows: [p] } = await query(
+      `SELECT request_no FROM approval_requests
+       WHERE action='invoice.issue' AND status='Pending' AND payload->>'invoice_id' = $1`, [id]);
+    return p ? p.request_no : null;
+  }
+
+  router.post('/:id/issue', can('invoices:write'), async (req, res) => {
+    const { id } = req.params;
+    if (!isUUID(id)) return res.status(400).json({ error: 'Invalid invoice ID.' });
+    try {
+      const inv = await loadInvoice(id);
+      if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+      if (inv.status !== 'Draft') return res.status(409).json({ error: `Invoice is already ${inv.status}.` });
+      if (!inv.lines.length) return res.status(400).json({ error: 'Add at least one line before issuing.' });
+      if (await approvals.needed(req, 'invoice.issue')) {
+        const pending = await pendingIssue(id);
+        if (pending) return res.status(409).json({ error: `This invoice is already awaiting approval (REQ-${pending}).` });
+        const party = inv.invoice_type === 'Purchase' ? inv.vendor : (inv.employee_name || inv.department);
+        return approvals.submit(req, res, 'invoice.issue', { invoice_id: id },
+          `Issue ${inv.invoice_type.toLowerCase()} invoice — ${party} — ${money(inv.total, inv.currency)} (${inv.lines.length} line${inv.lines.length === 1 ? '' : 's'})`,
+          { details: { invoice_id: id, total: inv.total, currency: inv.currency } });
+      }
+      const out = await runIssue({ invoice_id: id }, { userId: req.session.userId });
+      return res.status(out.status).json(out.body);
     } catch (err) {
       return dbError(res, err, 'Failed to issue invoice.');
     }

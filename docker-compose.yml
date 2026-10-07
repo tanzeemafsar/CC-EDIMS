@@ -27,6 +27,7 @@ services:
       - ./migration-002.sql:/docker-entrypoint-initdb.d/3-migration.sql:ro
       - ./migration-003.sql:/docker-entrypoint-initdb.d/4-migration.sql:ro
       - ./migration-004.sql:/docker-entrypoint-initdb.d/5-migration.sql:ro
+      - ./migration-005.sql:/docker-entrypoint-initdb.d/6-migration.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U edims -d edims"]
       interval: 10s

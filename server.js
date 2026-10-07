@@ -29,6 +29,7 @@ const session       = require('express-session');
 const connectPg     = require('connect-pg-simple');
 const express       = require('express');
 const { sanitizeStr, sanitizeObj, isUUID, isEmail, isDate, parseNumber, makeDb } = require('./lib/helpers');
+const { makeApprovals } = require('./lib/approvals');
 
 // =============================================================================
 // ENVIRONMENT VALIDATION
@@ -98,6 +99,9 @@ pool.on('error', (err) => {
 // the route modules via `db`
 const db = makeDb(pool);
 const { query, withTransaction, checkSubcategory, checkReference } = db;
+
+// Admin approval workflow — gated routes register their executors on it
+const approvals = makeApprovals(db);
 
 // =============================================================================
 // EXPRESS APPLICATION
@@ -260,6 +264,8 @@ const PERMS = {
     'invoices:read':     ['Admin', 'TAC', 'Viewer'],
     'invoices:write':    ['Admin', 'TAC'],
     'invoices:void':     ['Admin'],
+    'approvals:read':    ['Admin', 'TAC'],
+    'approvals:decide':  ['Admin'],
     'users:manage':      ['Admin'],
 };
 
@@ -713,67 +719,82 @@ app.get('/api/assets/suggestions', can('assets:read'), async (req, res) => {
     }
 });
 
-// POST /api/assets
-app.post('/api/assets', can('assets:write'), async (req, res) => {
+// New-device registration is split so the approval workflow can validate a
+// request when it's submitted and run it later when an Admin approves it.
+
+// Validates + normalises a new-device body. Returns { b } ready to insert,
+// or { status, error }.
+async function prepareNewAsset(body) {
     const ALLOWED = ['asset_tag','serial_number','qr_code','category_id','catalog_item_id','vendor',
                      'model','purchase_price','purchase_date','warranty_expiry',
                      'depreciation_years','status','location','notes'];
-    const b = sanitizeObj(req.body, ALLOWED);
+    const b = sanitizeObj(body, ALLOWED);
     const blank = (v) => v === undefined || v === null || v === '';
+    const bad = (error, status = 400) => ({ status, error });
 
-    if (!b.asset_tag || !b.serial_number)
-        return res.status(400).json({ error: 'asset_tag and serial_number are required.' });
-    if (!blank(b.catalog_item_id) && !isUUID(b.catalog_item_id))
-        return res.status(400).json({ error: 'Invalid catalog_item_id.' });
-    if (!blank(b.purchase_date) && !isDate(b.purchase_date))
-        return res.status(400).json({ error: 'purchase_date must be YYYY-MM-DD.' });
+    if (!b.asset_tag || !b.serial_number) return bad('asset_tag and serial_number are required.');
+    if (!blank(b.catalog_item_id) && !isUUID(b.catalog_item_id)) return bad('Invalid catalog_item_id.');
+    if (!blank(b.purchase_date) && !isDate(b.purchase_date)) return bad('purchase_date must be YYYY-MM-DD.');
+    if (!blank(b.warranty_expiry) && !isDate(b.warranty_expiry)) return bad('warranty_expiry must be YYYY-MM-DD.');
 
     const VALID_STATUS = ['Assigned','In-Hand','Faulty','Ordered','Need to Order'];
-    if (b.status && !VALID_STATUS.includes(b.status))
-        return res.status(400).json({ error: 'Invalid status value.' });
+    if (b.status && !VALID_STATUS.includes(b.status)) return bad('Invalid status value.');
 
+    // Creating from a catalogue entry: anything the form left blank is
+    // filled from the entry (category, vendor, model, price, depreciation,
+    // and warranty expiry = purchase date + the entry's warranty months).
+    if (!blank(b.catalog_item_id)) {
+        const { rows: [ci] } = await query('SELECT * FROM catalog_items WHERE id=$1', [b.catalog_item_id]);
+        if (!ci) return bad('Catalogue item not found.');
+        if (!ci.is_active) return bad('That catalogue item is inactive.');
+        if (blank(b.category_id)) b.category_id = ci.category_id;
+        if (blank(b.vendor)) b.vendor = ci.vendor;
+        if (blank(b.model)) b.model = ci.model;
+        if (blank(b.purchase_price)) b.purchase_price = ci.standard_price;
+        if (blank(b.depreciation_years)) b.depreciation_years = ci.depreciation_years;
+        if (blank(b.warranty_expiry) && ci.warranty_months != null && !blank(b.purchase_date)) {
+            const d = new Date(b.purchase_date + 'T00:00:00Z');
+            d.setUTCMonth(d.getUTCMonth() + ci.warranty_months);
+            b.warranty_expiry = d.toISOString().slice(0, 10);
+        }
+    }
+
+    if (blank(b.category_id) || blank(b.model))
+        return bad('category_id and model are required (or pick a catalogue item).');
+
+    const price = parseNumber(b.purchase_price, 'purchase_price');
+    const dep   = parseNumber(b.depreciation_years, 'depreciation_years', { max: 50, integer: true });
+    if (price.error || dep.error) return bad(price.error || dep.error);
+    b.purchase_price = price.value ?? null;
+    b.depreciation_years = dep.value ?? null;
+
+    const refErr = await checkSubcategory(b.category_id)
+        || await checkReference('vendors', b, 'vendor', 'Vendor')
+        || await checkReference('locations', b, 'location', 'Department');
+    if (refErr) return bad(refErr);
+
+    // Not picked from the catalogue? Link to the matching entry if one exists.
+    if (blank(b.catalog_item_id)) {
+        const { rows: [match] } = await query(
+            `SELECT id FROM catalog_items
+             WHERE category_id=$1 AND lower(COALESCE(vendor,''))=lower(COALESCE($2,'')) AND lower(model)=lower($3)`,
+            [b.category_id, b.vendor || null, b.model]
+        );
+        b.catalog_item_id = match ? match.id : null;
+    }
+
+    // Caught here too so a doomed request isn't queued for approval
+    const { rows: [dupe] } = await query(
+        'SELECT asset_tag FROM assets WHERE asset_tag=$1 OR serial_number=$2 LIMIT 1',
+        [b.asset_tag, b.serial_number]
+    );
+    if (dupe) return bad(dupe.asset_tag === b.asset_tag ? 'Asset tag already exists.' : 'Serial number already exists.', 409);
+    return { b };
+}
+
+// Inserts a prepared device. ctx = { userId, approvedByName?, requestNo? }
+async function insertAsset(b, ctx) {
     try {
-        // Creating from a catalogue entry: anything the form left blank is
-        // filled from the entry (category, vendor, model, price, depreciation,
-        // and warranty expiry = purchase date + the entry's warranty months).
-        if (!blank(b.catalog_item_id)) {
-            const { rows: [ci] } = await query('SELECT * FROM catalog_items WHERE id=$1', [b.catalog_item_id]);
-            if (!ci) return res.status(400).json({ error: 'Catalogue item not found.' });
-            if (!ci.is_active) return res.status(400).json({ error: 'That catalogue item is inactive.' });
-            if (blank(b.category_id)) b.category_id = ci.category_id;
-            if (blank(b.vendor)) b.vendor = ci.vendor;
-            if (blank(b.model)) b.model = ci.model;
-            if (blank(b.purchase_price)) b.purchase_price = ci.standard_price;
-            if (blank(b.depreciation_years)) b.depreciation_years = ci.depreciation_years;
-            if (blank(b.warranty_expiry) && ci.warranty_months != null && !blank(b.purchase_date)) {
-                const d = new Date(b.purchase_date + 'T00:00:00Z');
-                d.setUTCMonth(d.getUTCMonth() + ci.warranty_months);
-                b.warranty_expiry = d.toISOString().slice(0, 10);
-            }
-        }
-
-        if (blank(b.category_id) || blank(b.model))
-            return res.status(400).json({ error: 'category_id and model are required (or pick a catalogue item).' });
-
-        const price = parseNumber(b.purchase_price, 'purchase_price');
-        const dep   = parseNumber(b.depreciation_years, 'depreciation_years', { max: 50, integer: true });
-        if (price.error || dep.error) return res.status(400).json({ error: price.error || dep.error });
-
-        const catErr = await checkSubcategory(b.category_id)
-            || await checkReference('vendors', b, 'vendor', 'Vendor')
-            || await checkReference('locations', b, 'location', 'Department');
-        if (catErr) return res.status(400).json({ error: catErr });
-
-        // Not picked from the catalogue? Link to the matching entry if one exists.
-        if (blank(b.catalog_item_id)) {
-            const { rows: [match] } = await query(
-                `SELECT id FROM catalog_items
-                 WHERE category_id=$1 AND lower(COALESCE(vendor,''))=lower(COALESCE($2,'')) AND lower(model)=lower($3)`,
-                [b.category_id, b.vendor || null, b.model]
-            );
-            b.catalog_item_id = match ? match.id : null;
-        }
-
         const asset = await withTransaction(async (client) => {
             const { rows } = await client.query(
                 `INSERT INTO assets
@@ -782,32 +803,55 @@ app.post('/api/assets', can('assets:write'), async (req, res) => {
                   status,location,notes,created_by)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
                 [b.asset_tag, b.serial_number, b.qr_code||null, b.category_id, b.catalog_item_id,
-                 b.vendor||null, b.model,
-                 price.value ?? null,
-                 b.purchase_date||null, b.warranty_expiry||null,
-                 dep.value ?? null,
-                 b.status||'In-Hand', b.location||null, b.notes||null, req.session.userId]
+                 b.vendor||null, b.model, b.purchase_price ?? null,
+                 b.purchase_date||null, b.warranty_expiry||null, b.depreciation_years ?? null,
+                 b.status||'In-Hand', b.location||null, b.notes||null, ctx.userId]
             );
 
             // Authoritative registration entry in the immutable ledger
             await client.query(
                 `INSERT INTO asset_history (asset_id,event_type,new_status,performed_by,notes)
-                 VALUES ($1,'Asset Registered',$2,$3,'Asset registered into EDIMS inventory')`,
-                [rows[0].id, rows[0].status, req.session.userId]
+                 VALUES ($1,'Asset Registered',$2,$3,$4)`,
+                [rows[0].id, rows[0].status, ctx.userId,
+                 'Asset registered into EDIMS inventory' + approvals.approvalNote(ctx)]
             );
             return rows[0];
         });
-
-        return res.status(201).json({ asset });
+        return { status: 201, body: { asset } };
     } catch (err) {
         if (err.code === '23505') {
             const f = err.constraint?.includes('serial') ? 'Serial number' : 'Asset tag';
-            return res.status(409).json({ error: `${f} already exists.` });
+            return { status: 409, body: { error: `${f} already exists.` } };
         }
         if (err.code === '23514')
-            return res.status(400).json({ error: 'Constraint violation: check status/location combination.' });
+            return { status: 400, body: { error: 'Constraint violation: check status/location combination.' } };
         if (err.code === '22P02' || err.code === '22007' || err.code === '22008')
-            return res.status(400).json({ error: 'Invalid number or date value.' });
+            return { status: 400, body: { error: 'Invalid number or date value.' } };
+        console.error('[ASSETS] insert error:', err.message);
+        return { status: 500, body: { error: 'Failed to create asset.' } };
+    }
+}
+
+approvals.register('asset.create', async (payload, ctx) => {
+    const p = await prepareNewAsset(payload);
+    if (p.error) return { status: p.status, body: { error: p.error } };
+    return insertAsset(p.b, ctx);
+});
+
+// POST /api/assets
+app.post('/api/assets', can('assets:write'), async (req, res) => {
+    try {
+        const p = await prepareNewAsset(req.body);
+        if (p.error) return res.status(p.status).json({ error: p.error });
+        if (await approvals.needed(req, 'asset.create')) {
+            const { rows: [cp] } = await query('SELECT path FROM device_category_paths WHERE id=$1', [p.b.category_id]);
+            return approvals.submit(req, res, 'asset.create', p.b,
+                `Register ${p.b.asset_tag} — ${[p.b.vendor, p.b.model].filter(Boolean).join(' ')} (${cp ? cp.path : 'device'})`,
+                { details: { asset_tag: p.b.asset_tag, category: cp && cp.path, price: p.b.purchase_price } });
+        }
+        const out = await insertAsset(p.b, { userId: req.session.userId });
+        return res.status(out.status).json(out.body);
+    } catch (err) {
         console.error('[ASSETS] POST error:', err.message);
         return res.status(500).json({ error: 'Failed to create asset.' });
     }
@@ -901,49 +945,82 @@ app.put('/api/assets/:id', can('assets:write'), async (req, res) => {
     }
 });
 
-// PUT /api/assets/:id/status — status transitions (mark_faulty | repair | mark_ordered | retire)
+// Status transitions (mark_faulty | repair | mark_ordered | retire), each
+// its own approval action ('asset.<action>').
+const STATUS_ACTIONS = {
+    mark_faulty:  { label: 'Mark faulty',    defaultNote: 'Asset marked faulty',
+                    blocked: s => s === 'Faulty' ? 'Asset is already marked Faulty' : s === 'Need to Order' ? 'Cannot mark a Need-to-Order placeholder as Faulty' : null },
+    repair:       { label: 'Mark repaired',  defaultNote: 'Asset repaired and returned to inventory',
+                    blocked: s => s !== 'Faulty' ? `Asset is not currently marked Faulty (current status: ${s})` : null },
+    mark_ordered: { label: 'Mark ordered',   defaultNote: 'Asset status set to Ordered',
+                    blocked: s => s === 'Assigned' ? 'Cannot mark an assigned asset as Ordered. Return it first.' : null },
+    retire:       { label: 'Retire',         defaultNote: 'Asset retired',
+                    blocked: s => s === 'Retired' ? 'Asset is already Retired' : s === 'Need to Order' ? 'Cannot retire a Need-to-Order placeholder. Delete it instead.' : null },
+};
+
+async function runStatusChange({ asset_id: id, action, notes }, ctx) {
+    const approved = approvals.approvalNote(ctx);
+    // With an approval note appended, the procedures' own default text would
+    // be lost — so supply it explicitly.
+    const note = notes ? notes + approved : (approved ? STATUS_ACTIONS[action].defaultNote + approved : null);
+    try {
+        if (action === 'mark_faulty') {
+            await query('CALL mark_asset_faulty($1,$2,$3)', [id, ctx.userId, note]);
+        } else if (action === 'repair') {
+            await query('CALL repair_asset($1,$2,$3)', [id, ctx.userId, note]);
+        } else if (action === 'retire') {
+            await query('CALL retire_asset($1,$2,$3)', [id, ctx.userId, note]);
+        } else if (action === 'mark_ordered') {
+            const err = await withTransaction(async (client) => {
+                const chk = await client.query('SELECT status FROM assets WHERE id=$1 FOR UPDATE', [id]);
+                if (!chk.rowCount) return 'Asset not found.';
+                const blocked = STATUS_ACTIONS.mark_ordered.blocked(chk.rows[0].status);
+                if (blocked) return blocked;
+                await client.query(`UPDATE assets SET status='Ordered', location=NULL, updated_at=NOW() WHERE id=$1`, [id]);
+                await client.query(
+                    `INSERT INTO asset_history (asset_id,event_type,old_status,new_status,performed_by,notes)
+                     VALUES ($1,'Status Change',$2,'Ordered',$3,$4)`,
+                    [id, chk.rows[0].status, ctx.userId, note || STATUS_ACTIONS.mark_ordered.defaultNote]);
+                return null;
+            });
+            if (err) return { status: 400, body: { error: err } };
+        }
+        const { rows } = await query('SELECT * FROM assets WHERE id=$1', [id]);
+        return { status: 200, body: { asset: rows[0] } };
+    } catch (err) {
+        const msg = err.message || '';
+        if (msg.includes('not found') || msg.includes('not in') || msg.includes('not currently') || msg.includes('already') || msg.includes('Cannot'))
+            return { status: 400, body: { error: msg } };
+        console.error('[ASSETS] Status change error:', err.message);
+        return { status: 500, body: { error: 'Failed to update asset status.' } };
+    }
+}
+for (const action of Object.keys(STATUS_ACTIONS)) approvals.register('asset.' + action, runStatusChange);
+
+// PUT /api/assets/:id/status
 app.put('/api/assets/:id/status', can('assets:status'), async (req, res) => {
     const { id } = req.params;
     if (!isUUID(id)) return res.status(400).json({ error: 'Invalid asset ID.' });
 
     const { action, notes } = req.body;
-    const VALID_ACTIONS = ['mark_faulty', 'repair', 'mark_ordered', 'retire'];
-    if (!action || !VALID_ACTIONS.includes(action))
+    if (!action || !STATUS_ACTIONS[action])
         return res.status(400).json({ error: 'Valid action required: mark_faulty | repair | mark_ordered | retire' });
-
-    const cleanNotes = sanitizeStr(notes);
+    const payload = { asset_id: id, action, notes: sanitizeStr(notes) || null };
 
     try {
-        if (action === 'mark_faulty') {
-            await query('CALL mark_asset_faulty($1,$2,$3)', [id, req.session.userId, cleanNotes]);
-        } else if (action === 'repair') {
-            await query('CALL repair_asset($1,$2,$3)', [id, req.session.userId, cleanNotes]);
-        } else if (action === 'retire') {
-            // Requires migration-001.sql to have been applied (Retired enum value)
-            await query('CALL retire_asset($1,$2,$3)', [id, req.session.userId, cleanNotes]);
-        } else if (action === 'mark_ordered') {
-            const chk = await query(`SELECT status FROM assets WHERE id=$1 FOR UPDATE`, [id]);
-            if (!chk.rowCount) return res.status(404).json({ error: 'Asset not found.' });
-            if (chk.rows[0].status === 'Assigned')
-                return res.status(400).json({ error: 'Cannot mark an assigned asset as Ordered. Return it first.' });
+        const { rows: [a] } = await query('SELECT asset_tag, model, status FROM assets WHERE id=$1', [id]);
+        if (!a) return res.status(404).json({ error: 'Asset not found.' });
+        const blocked = STATUS_ACTIONS[action].blocked(a.status);
+        if (blocked) return res.status(400).json({ error: blocked });
 
-            await query(
-                `UPDATE assets SET status='Ordered', location=NULL, updated_at=NOW() WHERE id=$1`,
-                [id]
-            );
-            await query(
-                `INSERT INTO asset_history (asset_id,event_type,old_status,new_status,performed_by,notes)
-                 VALUES ($1,'Status Change',$2,'Ordered',$3,$4)`,
-                [id, chk.rows[0].status, req.session.userId, cleanNotes || 'Asset status set to Ordered']
-            );
+        if (await approvals.needed(req, 'asset.' + action)) {
+            return approvals.submit(req, res, 'asset.' + action, payload,
+                `${STATUS_ACTIONS[action].label}: ${a.asset_tag} — ${a.model} (currently ${a.status})`,
+                { assetId: id, justification: payload.notes });
         }
-
-        const { rows } = await query('SELECT * FROM assets WHERE id=$1', [id]);
-        return res.json({ asset: rows[0] });
+        const out = await runStatusChange(payload, { userId: req.session.userId });
+        return res.status(out.status).json(out.body);
     } catch (err) {
-        const msg = err.message || '';
-        if (msg.includes('not found') || msg.includes('not in') || msg.includes('not currently') || msg.includes('already'))
-            return res.status(400).json({ error: msg });
         console.error('[ASSETS] Status change error:', err.message);
         return res.status(500).json({ error: 'Failed to update asset status.' });
     }
@@ -974,16 +1051,11 @@ app.get('/api/assets/:id/history', can('assets:read'), async (req, res) => {
 // ASSIGNMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /api/assignments/create
-app.post('/api/assignments/create', can('assignments:write'), async (req, res) => {
-    const { asset_id, employee_id, notes } = req.body;
-    if (!asset_id || !employee_id)
-        return res.status(400).json({ error: 'asset_id and employee_id are required.' });
-    if (!isUUID(asset_id) || !isUUID(employee_id))
-        return res.status(400).json({ error: 'Invalid asset_id or employee_id format.' });
-
+async function runAssign({ asset_id, employee_id, notes }, ctx) {
+    const approved = approvals.approvalNote(ctx);
+    const note = notes ? notes + approved : (approved ? 'Asset assigned to employee' + approved : null);
     try {
-        await query('CALL assign_asset($1,$2,$3,$4)', [asset_id, employee_id, req.session.userId, sanitizeStr(notes)]);
+        await query('CALL assign_asset($1,$2,$3,$4)', [asset_id, employee_id, ctx.userId, note]);
         const { rows } = await query(
             `SELECT asgn.id, asgn.asset_id, asgn.employee_id, asgn.assigned_at,
                     a.asset_tag, cp.category, cp.subcategory, a.model,
@@ -995,30 +1067,88 @@ app.post('/api/assignments/create', can('assignments:write'), async (req, res) =
              WHERE asgn.asset_id=$1 AND asgn.returned_at IS NULL`,
             [asset_id]
         );
-        return res.status(201).json({ assignment: rows[0] });
+        return { status: 201, body: { assignment: rows[0] } };
     } catch (err) {
         const msg = err.message || '';
         if (msg.includes('not found') || msg.includes('not active') || msg.includes('not available') || msg.includes('already'))
-            return res.status(400).json({ error: msg });
+            return { status: 400, body: { error: msg } };
+        console.error('[ASSIGNMENTS] Create error:', err.message);
+        return { status: 500, body: { error: 'Failed to create assignment.' } };
+    }
+}
+approvals.register('assignment.create', runAssign);
+
+// POST /api/assignments/create
+app.post('/api/assignments/create', can('assignments:write'), async (req, res) => {
+    const { asset_id, employee_id, notes } = req.body;
+    if (!asset_id || !employee_id)
+        return res.status(400).json({ error: 'asset_id and employee_id are required.' });
+    if (!isUUID(asset_id) || !isUUID(employee_id))
+        return res.status(400).json({ error: 'Invalid asset_id or employee_id format.' });
+    const payload = { asset_id, employee_id, notes: sanitizeStr(notes) || null };
+
+    try {
+        // Same checks the procedure makes, up front, so a doomed request isn't queued
+        const { rows: [a] } = await query('SELECT asset_tag, model, status FROM assets WHERE id=$1', [asset_id]);
+        const { rows: [e] } = await query('SELECT full_name, employee_code, status FROM employees WHERE id=$1', [employee_id]);
+        if (!a || !e) return res.status(400).json({ error: `${!a ? 'Asset' : 'Employee'} not found.` });
+        if (a.status !== 'In-Hand') return res.status(400).json({ error: `Asset is not available for assignment (current status: ${a.status})` });
+        if (e.status !== 'Active') return res.status(400).json({ error: 'Employee is not active and cannot receive an assignment' });
+
+        if (await approvals.needed(req, 'assignment.create')) {
+            const { rows: [pending] } = await query(
+                `SELECT request_no FROM approval_requests WHERE action='assignment.create' AND status='Pending' AND asset_id=$1`, [asset_id]);
+            if (pending) return res.status(409).json({ error: `An assignment of ${a.asset_tag} is already awaiting approval (REQ-${pending.request_no}).` });
+            return approvals.submit(req, res, 'assignment.create', payload,
+                `Assign ${a.asset_tag} — ${a.model} to ${e.full_name} (${e.employee_code})`,
+                { assetId: asset_id, details: { employee: e.full_name }, justification: payload.notes });
+        }
+        const out = await runAssign(payload, { userId: req.session.userId });
+        return res.status(out.status).json(out.body);
+    } catch (err) {
         console.error('[ASSIGNMENTS] Create error:', err.message);
         return res.status(500).json({ error: 'Failed to create assignment.' });
     }
 });
+
+async function runReturn({ asset_id, notes }, ctx) {
+    const approved = approvals.approvalNote(ctx);
+    const note = notes ? notes + approved : (approved ? 'Asset returned to inventory' + approved : null);
+    try {
+        await query('CALL return_asset($1,$2,$3)', [asset_id, ctx.userId, note]);
+        const { rows } = await query('SELECT * FROM assets WHERE id=$1', [asset_id]);
+        return { status: 200, body: { asset: rows[0] } };
+    } catch (err) {
+        const msg = err.message || '';
+        if (msg.includes('not found') || msg.includes('not currently assigned'))
+            return { status: 400, body: { error: msg } };
+        console.error('[ASSIGNMENTS] Return error:', err.message);
+        return { status: 500, body: { error: 'Failed to return asset.' } };
+    }
+}
+approvals.register('assignment.return', runReturn);
 
 // POST /api/assignments/return
 app.post('/api/assignments/return', can('assignments:write'), async (req, res) => {
     const { asset_id, notes } = req.body;
     if (!asset_id) return res.status(400).json({ error: 'asset_id is required.' });
     if (!isUUID(asset_id)) return res.status(400).json({ error: 'Invalid asset_id format.' });
+    const payload = { asset_id, notes: sanitizeStr(notes) || null };
 
     try {
-        await query('CALL return_asset($1,$2,$3)', [asset_id, req.session.userId, sanitizeStr(notes)]);
-        const { rows } = await query('SELECT * FROM assets WHERE id=$1', [asset_id]);
-        return res.json({ asset: rows[0] });
+        const { rows: [a] } = await query(
+            `SELECT a.asset_tag, a.model, e.full_name FROM assets a
+             JOIN assignments s ON s.asset_id=a.id AND s.returned_at IS NULL
+             JOIN employees e ON e.id=s.employee_id WHERE a.id=$1`, [asset_id]);
+        if (!a) return res.status(400).json({ error: 'Asset is not currently assigned' });
+        if (await approvals.needed(req, 'assignment.return')) {
+            return approvals.submit(req, res, 'assignment.return', payload,
+                `Return ${a.asset_tag} — ${a.model} from ${a.full_name}`,
+                { assetId: asset_id, justification: payload.notes });
+        }
+        const out = await runReturn(payload, { userId: req.session.userId });
+        return res.status(out.status).json(out.body);
     } catch (err) {
-        const msg = err.message || '';
-        if (msg.includes('not found') || msg.includes('not currently assigned'))
-            return res.status(400).json({ error: msg });
         console.error('[ASSIGNMENTS] Return error:', err.message);
         return res.status(500).json({ error: 'Failed to return asset.' });
     }
@@ -1073,10 +1203,15 @@ app.get('/api/procurement', can('procurement:read'), async (req, res) => {
                    FROM procurement_dashboard pd
                    JOIN device_category_paths cp ON cp.id=pd.category_id
                    ORDER BY cp.category_sort, cp.category, cp.subcategory_sort, cp.subcategory`, []),
-            query(`SELECT pa.*, cp.category, cp.subcategory, u.username AS resolved_by_username
+            query(`SELECT pa.*, cp.category, cp.subcategory, u.username AS resolved_by_username,
+                          ur.username AS requested_by_username, ci.vendor AS item_vendor, ci.model AS item_model,
+                          ar.request_no
                    FROM procurement_alerts pa
                    JOIN device_category_paths cp ON cp.id=pa.category_id
                    LEFT JOIN users u ON u.id=pa.resolved_by
+                   LEFT JOIN users ur ON ur.id=pa.requested_by
+                   LEFT JOIN catalog_items ci ON ci.id=pa.catalog_item_id
+                   LEFT JOIN approval_requests ar ON ar.id=pa.approval_request_id
                    ORDER BY pa.created_at DESC LIMIT 100`, []),
         ]);
         return res.json({ dashboard: dash.rows, alerts: alerts.rows });
@@ -1108,24 +1243,67 @@ app.put('/api/procurement/:id/resolve', can('procurement:write'), async (req, re
     }
 });
 
-// POST /api/procurement/alerts — manually raise an order/alert for a
-// subcategory (as opposed to the ones the DB trigger opens automatically
-// when In-Hand stock drops to/below that subcategory's threshold).
+// Purchase / order requests: a subcategory (or a catalogue model, which
+// implies one), quantity, estimated unit price and a reason. Unlike the
+// orders the DB trigger opens on low stock, these are raised by people and
+// go through approval ('procurement.order').
+async function prepareOrder(body) {
+    const b = sanitizeObj(body, ['category_id', 'catalog_item_id', 'quantity', 'est_unit_price', 'currency', 'notes']);
+    const bad = (error) => ({ error });
+    for (const k of ['category_id', 'catalog_item_id', 'notes', 'currency']) if (b[k] === '') b[k] = null;
+    let item = null;
+    if (b.catalog_item_id) {
+        if (!isUUID(b.catalog_item_id)) return bad('Invalid catalog_item_id.');
+        ({ rows: [item] } = await query('SELECT * FROM catalog_items WHERE id=$1', [b.catalog_item_id]));
+        if (!item) return bad('Catalogue item not found.');
+        if (!item.is_active) return bad('That catalogue item is inactive.');
+        b.category_id = item.category_id;
+    }
+    const catErr = await checkSubcategory(b.category_id);
+    if (catErr) return bad(catErr);
+    const qty = parseNumber(b.quantity === undefined || b.quantity === null ? 1 : b.quantity, 'quantity', { min: 1, max: 10000, integer: true });
+    const price = parseNumber(b.est_unit_price === undefined || b.est_unit_price === null || b.est_unit_price === ''
+        ? (item ? item.standard_price : undefined) : b.est_unit_price, 'est_unit_price');
+    if (qty.error || price.error) return bad(qty.error || price.error);
+    b.quantity = qty.value;
+    b.est_unit_price = price.value ?? null;
+    b.currency = b.currency ? String(b.currency).toUpperCase() : (process.env.DEFAULT_CURRENCY || 'USD');
+    if (!/^[A-Z]{3}$/.test(b.currency)) return bad('currency must be a 3-letter code like USD.');
+    if (b.notes && b.notes.length > 1000) return bad('notes are limited to 1000 characters.');
+    return { b, item };
+}
+
+async function runOrder(b, ctx) {
+    const { rows: [alert] } = await query(
+        `INSERT INTO procurement_alerts (category_id, catalog_item_id, quantity, est_unit_price, currency, notes, requested_by, approval_request_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [b.category_id, b.catalog_item_id || null, b.quantity, b.est_unit_price, b.currency,
+         (b.notes || 'Manually requested order.') + approvals.approvalNote(ctx), ctx.userId, ctx.requestId || null]
+    );
+    return { status: 201, body: { alert } };
+}
+approvals.register('procurement.order', async (payload, ctx) => {
+    const p = await prepareOrder(payload);
+    if (p.error) return { status: 400, body: { error: p.error } };
+    return runOrder(p.b, ctx);
+});
+
+// POST /api/procurement/alerts
 app.post('/api/procurement/alerts', can('procurement:write'), async (req, res) => {
-    const category_id = sanitizeStr(req.body.category_id);
-    const notes = sanitizeStr(req.body.notes);
-
     try {
-        const catErr = await checkSubcategory(category_id);
-        if (catErr) return res.status(400).json({ error: catErr });
-
-        const { rows } = await query(
-            `INSERT INTO procurement_alerts (category_id, notes)
-             VALUES ($1, $2)
-             RETURNING *`,
-            [category_id, notes || 'Manually requested order.']
-        );
-        return res.status(201).json({ alert: rows[0] });
+        const p = await prepareOrder(req.body);
+        if (p.error) return res.status(400).json({ error: p.error });
+        if (await approvals.needed(req, 'procurement.order')) {
+            const { rows: [cp] } = await query('SELECT path FROM device_category_paths WHERE id=$1', [p.b.category_id]);
+            const what = p.item ? [p.item.vendor, p.item.model].filter(Boolean).join(' ') : cp.path;
+            const est = p.b.est_unit_price != null ? p.b.est_unit_price * p.b.quantity : null;
+            return approvals.submit(req, res, 'procurement.order', p.b,
+                `Purchase ${p.b.quantity} × ${what}` +
+                (est != null ? ` — est. ${p.b.currency} ${est.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''),
+                { details: { category: cp.path, quantity: p.b.quantity, est_total: est, currency: p.b.currency }, justification: p.b.notes });
+        }
+        const out = await runOrder(p.b, { userId: req.session.userId });
+        return res.status(out.status).json(out.body);
     } catch (err) {
         console.error('[PROCUREMENT] Create order error:', err.message);
         return res.status(500).json({ error: 'Failed to create order.' });
@@ -1542,7 +1720,8 @@ app.use('/api/reference', require('./routes/reference')(db, can));
 app.use('/api/catalog',   require('./routes/catalog')(db, can));
 app.use('/api/labels',    require('./routes/labels')(db, can));
 app.use('/api/receipts',  require('./routes/receipts')(db, can, roleCan));
-app.use('/api/invoices',  require('./routes/invoices')(db, can));
+app.use('/api/invoices',  require('./routes/invoices')(db, can, approvals));
+app.use('/api/approvals', require('./routes/approvals')(db, can, approvals));
 
 // Serve cached hardware images as static files (webp, 7-day cache)
 const HW_IMAGES = path.join(__dirname, 'public', 'images', 'hardware');

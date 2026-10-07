@@ -288,6 +288,13 @@
   .modal-close:hover{ color:var(--text); }
   .modal-body{ padding:18px; }
   .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:14px 18px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .rail button{ position:relative; }
+  .approval-note{ border:1px solid rgba(245,158,11,.4); background:rgba(245,158,11,.08); color:var(--text);
+    border-radius:var(--radius); padding:8px 12px; font-size:12.5px; margin-bottom:12px; }
+  .badge-Pending{ background:rgba(245,158,11,.16); color:var(--ordered); }
+  .badge-Approved{ background:rgba(16,185,129,.14); color:var(--assigned); }
+  .badge-Rejected, .badge-Failed{ background:rgba(239,68,68,.14); color:var(--faulty); }
+  .badge-Cancelled{ background:rgba(148,163,184,.16); color:var(--muted); }
   .modal.mid{ width:min(720px, 100%); }
   .modal.wide{ width:min(1040px, 100%); }
 
@@ -402,6 +409,9 @@
     <button data-view="procurement" data-perm="procurement:read" title="Procurement">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h2l1.6 9.2a1.5 1.5 0 0 0 1.5 1.3h6.4a1.5 1.5 0 0 0 1.5-1.2L17 7H6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="17" r="1"/><circle cx="14.5" cy="17" r="1"/></svg>
       <span class="rail-label">Orders</span></button>
+    <button data-view="approvals" data-perm="approvals:read" title="Approvals">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="3" width="13" height="14.5" rx="2"/><path d="M7 3V2h6v1M7 10.5l2 2 4-4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Approvals</span><span class="bell-count" id="nav-approvals-count" style="display:none;position:absolute;top:4px;right:6px;">0</span></button>
     <button data-view="invoices" data-perm="invoices:read" title="Invoices &amp; receipts">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 2.5h10v15l-2-1.3-1.7 1.3-1.6-1.3-1.7 1.3L6.3 16.2 5 17.5z" stroke-linejoin="round"/><path d="M7.5 7h5M7.5 10h5M7.5 13h3" stroke-linecap="round"/></svg>
       <span class="rail-label">Invoices</span></button>
@@ -554,14 +564,14 @@
       <!-- ---------- PROCUREMENT ---------- -->
       <section class="view" id="view-procurement">
         <div class="toolbar">
-          <button class="btn btn-primary" id="proc-new-order-btn" data-perm="procurement:write">+ New order</button>
+          <button class="btn btn-primary" id="proc-new-order-btn" data-perm="procurement:write">+ Purchase request</button>
         </div>
         <div class="panel">
           <div class="panel-head"><h3>Stock thresholds</h3></div>
           <div class="tbl-wrap"><table id="proc-dash"><thead></thead><tbody></tbody></table></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h3>Open alerts</h3></div>
+          <div class="panel-head"><h3>Orders &amp; low-stock alerts</h3></div>
           <div class="tbl-wrap"><table id="proc-alerts"><thead></thead><tbody></tbody></table></div>
         </div>
       </section>
@@ -633,6 +643,25 @@
         </div>
         <div class="panel">
           <div class="tbl-wrap"><table id="catalog-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- APPROVALS ---------- -->
+      <section class="view" id="view-approvals">
+        <div class="toolbar">
+          <div class="field">
+            <label>Status</label>
+            <select id="appr-status"><option value="">All</option><option>Pending</option><option>Approved</option><option>Rejected</option><option>Failed</option><option>Cancelled</option></select>
+          </div>
+          <button class="btn" id="appr-refresh">Refresh</button>
+          <span class="hint" id="appr-hint"></span>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="appr-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel" id="appr-rules-panel">
+          <div class="panel-head"><h3>Approval rules</h3><span class="hint" style="margin:0;">Ticked actions need an Admin's approval when a TAC user performs them. Admins' own actions never wait.</span></div>
+          <div class="tbl-wrap"><table id="appr-rules"><thead></thead><tbody></tbody></table></div>
         </div>
       </section>
 
@@ -781,25 +810,41 @@
   const bellCount = document.getElementById('bell-count');
   const bellList  = document.getElementById('bell-list');
 
-  function renderBellAlerts(alerts){
-    bellCount.textContent = alerts.length;
-    bellCount.style.display = alerts.length ? '' : 'none';
-    if (!alerts.length){
-      bellList.innerHTML = '<div class="hint" style="padding:14px;">No open alerts.</div>';
-      return;
+  // alerts: open procurement alerts; appr: /api/approvals/summary (or null)
+  function renderBellAlerts(alerts, appr){
+    const isAdmin = session && session.role === 'Admin';
+    const items = [];
+    if (appr && isAdmin && appr.pending){
+      items.push('<div class="bell-item" data-goto-approvals="1"><div class="bi-class">' + appr.pending +
+        ' request' + (appr.pending === 1 ? '' : 's') + ' waiting for your approval</div><div class="bi-notes">Open Approvals to review</div></div>');
     }
-    bellList.innerHTML = alerts.slice(0, 20).map(function(a){
-      return '<div class="bell-item" data-goto-procurement="1">' +
+    if (appr && !isAdmin && (appr.pending || appr.my_recent_decisions)){
+      items.push('<div class="bell-item" data-goto-approvals="1"><div class="bi-class">Your approval requests</div><div class="bi-notes">' +
+        appr.pending + ' waiting · ' + appr.my_recent_decisions + ' decided this week</div></div>');
+    }
+    alerts.slice(0, 20).forEach(function(a){
+      items.push('<div class="bell-item" data-goto-procurement="1">' +
         '<div class="bi-class">' + esc(catLabel(a)) + '</div>' +
-        '<div class="bi-notes">' + esc(a.notes || 'Low stock') + '</div></div>';
-    }).join('');
+        '<div class="bi-notes">' + esc(a.notes || 'Low stock') + '</div></div>');
+    });
+    const n = alerts.length + (appr && isAdmin ? appr.pending : 0);
+    bellCount.textContent = n;
+    bellCount.style.display = n ? '' : 'none';
+    const navCount = document.getElementById('nav-approvals-count');
+    const navN = appr ? (isAdmin ? appr.pending : 0) : 0;
+    navCount.textContent = navN;
+    navCount.style.display = navN ? '' : 'none';
+    bellList.innerHTML = items.length ? items.join('') : '<div class="hint" style="padding:14px;">No open alerts.</div>';
   }
 
   async function refreshBell(){
-    if (!session || !can('procurement:read')) return;
+    if (!session) return;
     try{
-      const d = await get('/api/procurement');
-      renderBellAlerts((d.alerts || []).filter(function(a){ return !a.resolved_at; }));
+      const [proc, appr] = await Promise.all([
+        can('procurement:read') ? get('/api/procurement') : Promise.resolve({ alerts: [] }),
+        can('approvals:read') ? get('/api/approvals/summary').catch(function(){ return null; }) : Promise.resolve(null),
+      ]);
+      renderBellAlerts((proc.alerts || []).filter(function(a){ return !a.resolved_at; }), appr);
     }catch(err){ /* silent — bell shouldn't interrupt whatever the user's doing */ }
   }
 
@@ -811,6 +856,11 @@
     if (!bellPanel.contains(e.target) && e.target !== bellBtn) bellPanel.classList.remove('show');
   });
   bellList.addEventListener('click', function(e){
+    if (e.target.closest('[data-goto-approvals]')){
+      bellPanel.classList.remove('show');
+      if (can('approvals:read')) showView('approvals');
+      return;
+    }
     if (e.target.closest('[data-goto-procurement]')){
       bellPanel.classList.remove('show');
       if (can('procurement:read')) showView('procurement');
@@ -908,6 +958,8 @@
     'invoices:read':     ['Admin','TAC','Viewer'],
     'invoices:write':    ['Admin','TAC'],
     'invoices:void':     ['Admin'],
+    'approvals:read':    ['Admin','TAC'],
+    'approvals:decide':  ['Admin'],
     'users:manage':      ['Admin'],
   };
   let session = null; // { id, username, role, loginAt }
@@ -930,6 +982,7 @@
     assets:       { title:'Assets',       crumb:'/api/assets',             perm:'assets:read' },
     catalog:      { title:'Catalogue',    crumb:'/api/catalog',            perm:'assets:read' },
     invoices:     { title:'Invoices & receipts', crumb:'/api/invoices',    perm:'invoices:read' },
+    approvals:    { title:'Approvals',    crumb:'/api/approvals',          perm:'approvals:read' },
     reference:    { title:'Reference data', crumb:'/api/reference',        perm:'assets:read' },
     employees:    { title:'Employees',    crumb:'/api/employees',          perm:'employees:read' },
     assignments:  { title:'Assignments',  crumb:'/api/assignments',        perm:'assets:read' },
@@ -1110,6 +1163,41 @@
     }).join('');
   }
   /* =========================================================================
+     APPROVALS — rules cache + helpers used by every gated form
+     ========================================================================= */
+  let approvalRules = {}; // action -> requires approval (for non-Admins)
+  async function loadApprovalRules(){
+    if (!can('approvals:read')){ approvalRules = {}; return; }
+    try{
+      const d = await get('/api/approvals/policies');
+      approvalRules = {};
+      d.policies.forEach(function(p){ approvalRules[p.action] = p.requires_approval; });
+    }catch(e){ /* forms just won't show the notice; the server still decides */ }
+  }
+  function needsApproval(action){
+    return !!session && session.role !== 'Admin' && approvalRules[action] === true;
+  }
+  // Notice (+ optional reason box) for a form whose action will be queued
+  function approvalNoticeHtml(action, withReason){
+    if (!needsApproval(action)) return '';
+    return '<div class="approval-note">This needs an Admin\'s approval — it will be sent as a request and only happens once approved.</div>' +
+      (withReason === false ? '' : field('Reason for the request', '<textarea id="f-justification" rows="2" maxlength="1000" placeholder="Helps the Admin decide quickly"></textarea>'));
+  }
+  function readJustification(){
+    const el = document.getElementById('f-justification');
+    return el ? (el.value.trim() || null) : undefined;
+  }
+  // True (after telling the user) when the server queued the action for approval
+  function wasSentForApproval(d){
+    if (d && d.pending_approval){
+      toast(d.message || 'Sent for Admin approval.', 'ok');
+      refreshBell();
+      return true;
+    }
+    return false;
+  }
+
+  /* =========================================================================
      REFERENCE DATA / CATALOGUE — shared caches + picker helpers
      ========================================================================= */
   let refCache = { vendors: null, locations: null };
@@ -1189,9 +1277,10 @@
     document.getElementById('who-name').textContent = session.username;
     document.getElementById('who-role').textContent = session.role;
     applyPermissionVisibility();
+    loadApprovalRules();
     // Land on the URL's hash view if it's valid and permitted; otherwise
     // fall back to the first view this role can actually see.
-    const order = ['dashboard','assets','catalog','employees','assignments','procurement','invoices','audits','hardware','categories','reference','users'];
+    const order = ['dashboard','assets','catalog','employees','assignments','procurement','approvals','invoices','audits','hardware','categories','reference','users'];
     consumeAssetLink();
     const hashView = viewFromHash();
     const landing = (hashView && can(VIEW_META[hashView].perm))
@@ -1529,11 +1618,15 @@
   // device's label so it can be printed straight away.
   async function openNewAssetModal(prefill, title, after){
     if (!(await ensureCategoriesForForm())) return;
-    openModal(title || 'New asset', assetFormHtml(prefill), [
+    const gated = needsApproval('asset.create');
+    openModal(title || 'New asset', approvalNoticeHtml('asset.create') + assetFormHtml(prefill), [
       { label:'Cancel', onClick:closeModal },
-      { label:'Create', cls:'btn-primary', onClick: async function(){
+      { label: gated ? 'Request approval' : 'Create', cls:'btn-primary', onClick: async function(){
           try{
-            const d = await post('/api/assets', readNewAssetForm());
+            const body = readNewAssetForm();
+            body.justification = readJustification();
+            const d = await post('/api/assets', body);
+            if (wasSentForApproval(d)){ closeModal(); return; }
             toast('Asset ' + d.asset.asset_tag + ' registered.', 'ok');
             if (after) after();
             if (document.getElementById('view-assets').classList.contains('active')) loadAssets();
@@ -1639,14 +1732,18 @@
     if (statusId){
       const action = e.target.getAttribute('data-action');
       const labelMap = { mark_faulty:'Mark as faulty', repair:'Mark as repaired', mark_ordered:'Mark as ordered', retire:'Retire asset' };
-      openModal(labelMap[action] || action, field('Notes (optional)', '<textarea id="f-status-notes" rows="3"></textarea>'), [
+      const gated = needsApproval('asset.' + action);
+      openModal(labelMap[action] || action,
+        approvalNoticeHtml('asset.' + action, false) +
+        field(gated ? 'Reason for the request' : 'Notes (optional)', '<textarea id="f-status-notes" rows="3"></textarea>'), [
         { label:'Cancel', onClick:closeModal },
-        { label:'Confirm', cls: action === 'retire' ? 'btn-danger' : 'btn-primary', onClick: async function(){
+        { label: gated ? 'Request approval' : 'Confirm', cls: action === 'retire' ? 'btn-danger' : 'btn-primary', onClick: async function(){
             try{
-              await put('/api/assets/' + statusId + '/status', {
+              const d = await put('/api/assets/' + statusId + '/status', {
                 action: action,
                 notes: document.getElementById('f-status-notes').value.trim() || null,
               });
+              if (wasSentForApproval(d)){ closeModal(); return; }
               toast('Status updated.', 'ok');
               closeModal(); loadAssets();
             }catch(err){ toast(err.message, 'err'); }
@@ -1815,18 +1912,20 @@
       ]);
       const assetOpts = assetsRes.assets.map(function(a){ return '<option value="' + a.id + '">' + esc(a.asset_tag) + ' — ' + esc(a.model) + '</option>'; }).join('');
       const empOpts = empRes.employees.map(function(e){ return '<option value="' + e.id + '">' + esc(e.full_name) + ' (' + esc(e.employee_code) + ')</option>'; }).join('');
-      openModal('Assign asset', '<div class="grid-2">' +
+      const gated = needsApproval('assignment.create');
+      openModal('Assign asset', approvalNoticeHtml('assignment.create', false) + '<div class="grid-2">' +
         field('Asset (In-Hand only)', '<select id="f-asset_id"><option value="">Select…</option>' + assetOpts + '</select>') +
         field('Employee', '<select id="f-employee_id"><option value="">Select…</option>' + empOpts + '</select>') +
-        '</div>' + field('Notes', '<textarea id="f-notes" rows="2"></textarea>'),
+        '</div>' + field(gated ? 'Notes / reason for the request' : 'Notes', '<textarea id="f-notes" rows="2"></textarea>'),
         [
           { label:'Cancel', onClick:closeModal },
-          { label:'Assign', cls:'btn-primary', onClick: async function(){
+          { label: gated ? 'Request approval' : 'Assign', cls:'btn-primary', onClick: async function(){
               const asset_id = document.getElementById('f-asset_id').value;
               const employee_id = document.getElementById('f-employee_id').value;
               if (!asset_id || !employee_id){ toast('Select both an asset and an employee.', 'err'); return; }
               try{
-                await post('/api/assignments/create', { asset_id, employee_id, notes: document.getElementById('f-notes').value.trim() || null });
+                const d = await post('/api/assignments/create', { asset_id, employee_id, notes: document.getElementById('f-notes').value.trim() || null });
+                if (wasSentForApproval(d)){ closeModal(); return; }
                 toast('Asset assigned.', 'ok');
                 closeModal(); loadAssignments();
               }catch(err){ toast(err.message, 'err'); }
@@ -1838,11 +1937,14 @@
   document.getElementById('content').addEventListener('click', async function(e){
     const assetId = e.target.getAttribute && e.target.getAttribute('data-return-asset');
     if (!assetId) return;
-    openModal('Return asset', field('Return notes (optional)', '<textarea id="f-return-notes" rows="3"></textarea>'), [
+    const gated = needsApproval('assignment.return');
+    openModal('Return asset', approvalNoticeHtml('assignment.return', false) +
+      field(gated ? 'Reason for the request' : 'Return notes (optional)', '<textarea id="f-return-notes" rows="3"></textarea>'), [
       { label:'Cancel', onClick:closeModal },
-      { label:'Return', cls:'btn-primary', onClick: async function(){
+      { label: gated ? 'Request approval' : 'Return', cls:'btn-primary', onClick: async function(){
           try{
-            await post('/api/assignments/return', { asset_id: assetId, notes: document.getElementById('f-return-notes').value.trim() || null });
+            const d = await post('/api/assignments/return', { asset_id: assetId, notes: document.getElementById('f-return-notes').value.trim() || null });
+            if (wasSentForApproval(d)){ closeModal(); return; }
             toast('Asset returned.', 'ok');
             closeModal(); loadAssignments();
           }catch(err){ toast(err.message, 'err'); }
@@ -1857,7 +1959,7 @@
     const dashTbl = document.getElementById('proc-dash');
     setHead(dashTbl, ['Device Type','Current stock','Threshold','Status','Open alerts','Latest alert']);
     const alertTbl = document.getElementById('proc-alerts');
-    setHead(alertTbl, ['Device Type','Created','Notes','Status','Actions']);
+    setHead(alertTbl, ['Device Type','Request','Created','Notes','Status','Actions']);
     try{
       const d = await get('/api/procurement');
       setRows(dashTbl, d.dashboard.map(function(r){
@@ -1878,12 +1980,18 @@
         const actions = (!a.resolved_at && can('procurement:write'))
           ? '<button class="btn" data-resolve-alert="' + a.id + '">Resolve</button>'
           : (a.resolved_at ? '<span class="hint">Resolved by ' + esc(a.resolved_by_username || '—') + '</span>' : '—');
-        return '<tr><td>' + esc(catLabel(a)) + '</td><td class="mono">' + fmtDateTime(a.created_at) + '</td><td>' + esc(a.notes || '—') +
+        // Purchase requests carry quantity / model / estimate; trigger alerts don't
+        const request = a.quantity
+          ? '<strong>' + esc(a.quantity) + ' × ' + esc(a.item_model ? [a.item_vendor, a.item_model].filter(Boolean).join(' ') : a.subcategory) + '</strong>' +
+            (a.est_unit_price != null ? '<div class="hint" style="margin:0;">est. ' + fmtCur(a.est_unit_price * a.quantity, a.currency) + '</div>' : '') +
+            '<div class="hint" style="margin:0;">by ' + esc(a.requested_by_username || '—') + (a.request_no ? ' · REQ-' + esc(a.request_no) : '') + '</div>'
+          : '<span class="muted">Low-stock alert</span>';
+        return '<tr><td>' + esc(catLabel(a)) + '</td><td>' + request + '</td><td class="mono">' + fmtDateTime(a.created_at) + '</td><td>' + esc(a.notes || '—') +
           '</td><td>' + (a.resolved_at ? badge('Verified') : '<span class="badge badge-Faulty">Open</span>') + '</td><td>' + actions + '</td></tr>';
-      }), 5, 'No procurement alerts.');
+      }), 6, 'No procurement alerts.');
     }catch(err){
       setRowsError(dashTbl, 6, 'Could not load procurement data — ' + err.message, loadProcurement);
-      setRowsError(alertTbl, 5, 'Could not load alerts — ' + err.message, loadProcurement);
+      setRowsError(alertTbl, 6, 'Could not load alerts — ' + err.message, loadProcurement);
       toast(err.message, 'err');
     }
   }
@@ -1921,22 +2029,62 @@
 
   document.getElementById('proc-new-order-btn').addEventListener('click', async function(){
     if (!(await ensureCategoriesForForm())) return;
-    openModal('New order', ''
-      + field('Category*', '<select id="f-order-class">' + subcategoryOptionsHtml() + '</select>')
-      + field('Notes', '<textarea id="f-order-notes" rows="3" placeholder="e.g. Ordering 10 more units — vendor lead time 2 weeks.">Manually requested order.</textarea>'),
+    const gated = needsApproval('procurement.order');
+    const itemOpts = '<option value="">— Any model (choose a category below) —</option>' + (catalogCache || []).map(function(c){
+      return '<option value="' + c.id + '">' + esc([c.vendor, c.model].filter(Boolean).join(' ')) + '  ·  ' + esc(catLabel(c)) + '</option>';
+    }).join('');
+    openModal('Purchase request',
+      approvalNoticeHtml('procurement.order', false) +
+      field('Catalogue model', '<select id="f-order-item">' + itemOpts + '</select>') +
+      '<div class="grid-2">' +
+        field('Category*', '<select id="f-order-class">' + subcategoryOptionsHtml() + '</select>') +
+        field('Quantity*', '<input id="f-order-qty" type="number" min="1" max="10000" step="1" value="1">') +
+        field('Est. unit price', '<input id="f-order-price" type="number" min="0" step="0.01" placeholder="From catalogue if blank">') +
+        field('Currency', '<input id="f-order-cur" maxlength="3" placeholder="Default" style="text-transform:uppercase;">') +
+      '</div>' +
+      '<div class="totals"><span>Estimated total</span><span class="num t" id="f-order-total">—</span></div>' +
+      field(gated ? 'Reason for the request*' : 'Notes', '<textarea id="f-order-notes" rows="3" placeholder="e.g. 5 laptops for the Q4 engineering hires — vendor lead time 2 weeks."></textarea>'),
       [
         { label:'Cancel', onClick:closeModal },
-        { label:'Create order', cls:'btn-primary', onClick: async function(){
+        { label: gated ? 'Request approval' : 'Create order', cls:'btn-primary', onClick: async function(){
+            const notes = document.getElementById('f-order-notes').value.trim();
+            if (gated && !notes){ toast('Give a reason so the Admin can decide.', 'err'); return; }
             try{
-              await post('/api/procurement/alerts', {
+              const d = await post('/api/procurement/alerts', {
+                catalog_item_id: document.getElementById('f-order-item').value || null,
                 category_id: document.getElementById('f-order-class').value,
-                notes: document.getElementById('f-order-notes').value.trim() || null,
+                quantity: document.getElementById('f-order-qty').value,
+                est_unit_price: document.getElementById('f-order-price').value || null,
+                currency: document.getElementById('f-order-cur').value.trim() || null,
+                notes: notes || null,
               });
+              closeModal();
+              if (wasSentForApproval(d)) return;
               toast('Order created.', 'ok');
-              closeModal(); loadProcurement(); refreshBell();
+              loadProcurement(); refreshBell();
             }catch(err){ toast(err.message, 'err'); }
           } },
-      ]);
+      ], 'mid');
+    const item = document.getElementById('f-order-item');
+    function estimate(){
+      const ci = (catalogCache || []).find(function(c){ return c.id === item.value; });
+      const priceEl = document.getElementById('f-order-price');
+      const price = priceEl.value !== '' ? parseFloat(priceEl.value) : (ci && ci.standard_price != null ? Number(ci.standard_price) : NaN);
+      const qty = parseInt(document.getElementById('f-order-qty').value, 10) || 0;
+      document.getElementById('f-order-total').textContent = isNaN(price) ? '—'
+        : fmtCur(price * qty, document.getElementById('f-order-cur').value.toUpperCase() || '');
+    }
+    item.addEventListener('change', function(){
+      const ci = (catalogCache || []).find(function(c){ return c.id === item.value; });
+      const cls = document.getElementById('f-order-class');
+      if (ci){
+        if (cls.querySelector('option[value="' + CSS.escape(ci.category_id) + '"]')) cls.value = ci.category_id;
+        document.getElementById('f-order-price').placeholder = ci.standard_price != null ? 'Catalogue: ' + Number(ci.standard_price).toFixed(2) : 'No catalogue price';
+      }
+      cls.disabled = !!ci;
+      estimate();
+    });
+    modalBody.oninput = estimate;
   });
 
   /* =========================================================================
@@ -2624,7 +2772,8 @@
       setRows(tbl, d.invoices.map(function(i){
         const overdue = i.status === 'Issued' && i.due_date && i.due_date < todayIso();
         return '<tr><td class="mono">' + (i.invoice_number ? esc(i.invoice_number) : '<span class="muted">Draft</span>') + '</td>' +
-          '<td>' + esc(i.invoice_type) + '</td><td>' + badge(i.status) + (overdue ? ' <span class="badge badge-Void">Overdue</span>' : '') + '</td>' +
+          '<td>' + esc(i.invoice_type) + '</td><td>' + badge(i.status) + (overdue ? ' <span class="badge badge-Void">Overdue</span>' : '') +
+            (i.pending_request_no ? ' <span class="badge badge-Pending" title="Awaiting approval to be issued">REQ-' + esc(i.pending_request_no) + '</span>' : '') + '</td>' +
           '<td class="mono">' + fmtDate(i.invoice_date) + '</td><td class="mono">' + fmtDate(i.due_date) + '</td>' +
           '<td>' + esc(i.party || '—') + (i.vendor_invoice_number ? '<div class="hint" style="margin:0;">Ref ' + esc(i.vendor_invoice_number) + '</div>' : '') + '</td>' +
           '<td class="num">' + fmtCur(i.total, i.currency) + '</td><td class="mono">' + esc(i.receipt_count) + '</td>' +
@@ -2654,7 +2803,8 @@
   async function openInvoice(id){
     try{
       const d = await get('/api/invoices/' + id);
-      if (d.invoice.status === 'Draft' && can('invoices:write')) openInvoiceEditor(d.invoice.invoice_type, d.invoice);
+      // A draft awaiting approval to be issued is frozen — show it read-only
+      if (d.invoice.status === 'Draft' && can('invoices:write') && !d.invoice.pending_request_no) openInvoiceEditor(d.invoice.invoice_type, d.invoice);
       else openInvoiceView(d.invoice);
     }catch(err){ toast(err.message, 'err'); }
   }
@@ -2725,7 +2875,7 @@
         .concat(inv.id ? [{ label:'Download draft PDF', onClick: function(){ download('/api/invoices/' + inv.id + '/pdf'); } }] : [])
         .concat([
           { label:'Save draft', onClick: function(){ save(false); } },
-          { label:'Save & issue', cls:'btn-primary', onClick: function(){ save(true); } },
+          { label: needsApproval('invoice.issue') ? 'Save & request issue' : 'Save & issue', cls:'btn-primary', onClick: function(){ save(true); } },
         ]),
       'wide');
 
@@ -2794,11 +2944,15 @@
       else { body.employee_id = val('employee_id') || null; body.department = val('department') || null; }
       if (!inv.id) body.invoice_type = type;
       if (issue && !body.lines.length){ toast('Add at least one line before issuing.', 'err'); return; }
-      if (issue && !confirm('Issue this invoice? It gets its number now and can no longer be edited.')) return;
+      const gatedIssue = needsApproval('invoice.issue');
+      if (issue && !confirm(gatedIssue
+        ? 'Save and send this invoice to an Admin for approval? It is issued (and numbered) once approved, and can\'t be edited while it waits.'
+        : 'Issue this invoice? It gets its number now and can no longer be edited.')) return;
       try{
         const saved = inv.id ? await put('/api/invoices/' + inv.id, body) : await post('/api/invoices', body);
         if (issue){
-          const issued = await post('/api/invoices/' + saved.invoice.id + '/issue');
+          const issued = await post('/api/invoices/' + saved.invoice.id + '/issue', gatedIssue ? { justification: body.notes } : undefined);
+          if (wasSentForApproval(issued)){ closeModal(); loadInvoices(); return; }
           toast('Issued ' + issued.invoice.invoice_number + '.', 'ok');
           loadInvoices();
           openInvoiceView(issued.invoice);
@@ -2823,6 +2977,8 @@
         (inv.department ? '<dt>Department</dt><dd>' + esc(inv.department) + '</dd>' : '');
     const canUpload = can('assets:write') && can('invoices:write') && inv.status !== 'Void';
     openModal((inv.invoice_number || 'Draft') + ' · ' + inv.invoice_type,
+      (inv.pending_request_no ? '<div class="approval-note">Awaiting an Admin\'s approval to be issued (REQ-' + esc(inv.pending_request_no) +
+        '). It can\'t be edited meanwhile — cancel the request under Approvals to make changes.</div>' : '') +
       '<div class="grid-2"><dl class="kv">' +
           '<dt>Status</dt><dd>' + badge(inv.status) + '</dd>' +
           '<dt>Invoice date</dt><dd>' + fmtDate(inv.invoice_date) + '</dd>' +
@@ -2880,6 +3036,127 @@
       }catch(err){ toast(err.message, 'err'); }
     };
   }
+
+  /* =========================================================================
+     APPROVALS
+     ========================================================================= */
+  let approvalPage = [];
+  let approvalsVisited = false;
+
+  async function loadApprovals(){
+    const isAdmin = can('approvals:decide');
+    const tbl = document.getElementById('appr-table');
+    setHead(tbl, ['Req #','Action','Summary','Reason','Requested','Status','Decision','Actions']);
+    document.getElementById('appr-hint').textContent = isAdmin
+      ? 'Everyone\'s requests. Approving runs the action as the person who asked.'
+      : 'Your requests. You can cancel one while it is still pending.';
+    const st = document.getElementById('appr-status').value;
+    try{
+      const d = await get('/api/approvals' + (st ? '?status=' + encodeURIComponent(st) : ''));
+      approvalPage = d.requests;
+      setRows(tbl, d.requests.map(function(r){
+        const actions = [];
+        if (r.status === 'Pending' && isAdmin) actions.push('<button class="btn btn-primary" data-appr-review="' + r.id + '">Review</button>');
+        if (r.status === 'Pending' && r.requested_by_username === session.username)
+          actions.push('<button class="btn" data-appr-cancel="' + r.id + '">Cancel</button>');
+        const decision = r.status === 'Pending' ? '<span class="muted">—</span>'
+          : esc(r.decided_by_username || '') + ' · ' + fmtDateTime(r.decided_at) +
+            (r.decision_note ? '<div class="hint" style="margin:0;">' + esc(r.decision_note) + '</div>' : '') +
+            (r.error ? '<div class="hint" style="margin:0;color:var(--faulty);">' + esc(r.error) + '</div>' : '');
+        return '<tr><td class="mono">REQ-' + esc(r.request_no) + '</td><td>' + esc(r.action_label) + '</td>' +
+          '<td>' + esc(r.summary) + '</td><td>' + esc(r.justification || '—') + '</td>' +
+          '<td>' + esc(r.requested_by_username) + '<div class="hint" style="margin:0;">' + fmtDateTime(r.requested_at) + '</div></td>' +
+          '<td>' + badge(r.status) + '</td><td>' + decision + '</td>' +
+          '<td><div class="row-actions">' + actions.join('') + '</div></td></tr>';
+      }), 8, st === 'Pending' ? 'Nothing waiting for approval.' : 'No requests yet.');
+    }catch(err){
+      setRowsError(tbl, 8, 'Could not load requests — ' + err.message, loadApprovals);
+    }
+
+    const rulesPanel = document.getElementById('appr-rules-panel');
+    rulesPanel.style.display = isAdmin ? '' : 'none';
+    if (isAdmin){
+      const rt = document.getElementById('appr-rules');
+      setHead(rt, ['Action','Needs approval','Last changed']);
+      try{
+        const p = await get('/api/approvals/policies');
+        setRows(rt, p.policies.map(function(x){
+          return '<tr><td>' + esc(x.label) + '</td><td><label style="display:flex;gap:8px;align-items:center;cursor:pointer;">' +
+            '<input type="checkbox" data-appr-rule="' + esc(x.action) + '"' + (x.requires_approval ? ' checked' : '') + '> ' +
+            (x.requires_approval ? 'Yes' : 'No') + '</label></td>' +
+            '<td class="hint">' + (x.updated_by_username ? esc(x.updated_by_username) + ' · ' + fmtDateTime(x.updated_at) : 'Default') + '</td></tr>';
+        }), 3, 'No rules.');
+      }catch(err){ setRowsError(rt, 3, 'Could not load rules — ' + err.message, loadApprovals); }
+    }
+  }
+  loaders.approvals = function(){
+    // Admins land on what needs their attention; others on all their requests
+    if (!approvalsVisited){
+      document.getElementById('appr-status').value = can('approvals:decide') ? 'Pending' : '';
+      approvalsVisited = true;
+    }
+    loadApprovals();
+  };
+  document.getElementById('appr-refresh').addEventListener('click', loadApprovals);
+  document.getElementById('appr-status').addEventListener('change', loadApprovals);
+
+  function openApprovalReview(r){
+    const det = r.details || {};
+    openModal('REQ-' + r.request_no + ' · ' + r.action_label,
+      '<dl class="kv">' +
+        '<dt>Request</dt><dd><strong>' + esc(r.summary) + '</strong></dd>' +
+        '<dt>Requested by</dt><dd>' + esc(r.requested_by_username) + ' · ' + fmtDateTime(r.requested_at) + '</dd>' +
+        '<dt>Reason</dt><dd>' + esc(r.justification || '—') + '</dd>' +
+        (det.est_total != null ? '<dt>Estimated total</dt><dd>' + fmtCur(det.est_total, det.currency) + '</dd>' : '') +
+        (det.total != null ? '<dt>Invoice total</dt><dd>' + fmtCur(det.total, det.currency) + '</dd>' : '') +
+        (det.price != null ? '<dt>Purchase price</dt><dd>' + fmtMoney(det.price) + '</dd>' : '') +
+      '</dl>' +
+      '<div class="hint" style="margin:12px 0;">Approving runs this now, as ' + esc(r.requested_by_username) +
+        ', after re-checking it is still valid. If something changed meanwhile it is marked Failed with the reason.</div>' +
+      field('Note (required to reject)', '<textarea id="f-appr-note" rows="2" maxlength="1000"></textarea>'),
+      [
+        { label:'Close', onClick:closeModal },
+        { label:'Reject', cls:'btn-danger', onClick: function(){ decide(r, 'reject'); } },
+        { label:'Approve', cls:'btn-primary', onClick: function(){ decide(r, 'approve'); } },
+      ], 'mid');
+  }
+
+  async function decide(r, kind){
+    const note = document.getElementById('f-appr-note').value.trim();
+    if (kind === 'reject' && !note){ toast('Give a reason when rejecting.', 'err'); return; }
+    try{
+      const d = await post('/api/approvals/' + r.id + '/' + kind, { note: note || null });
+      const s = d.request.status;
+      if (s === 'Failed') toast('REQ-' + r.request_no + ' could not be carried out: ' + d.request.error, 'err');
+      else toast('REQ-' + r.request_no + ' ' + s.toLowerCase() + '.', 'ok');
+      closeModal(); loadApprovals(); refreshBell();
+    }catch(err){ toast(err.message, 'err'); loadApprovals(); }
+  }
+
+  document.getElementById('appr-table').addEventListener('click', async function(e){
+    const t = e.target;
+    if (!t.getAttribute) return;
+    const find = function(id){ return approvalPage.find(function(r){ return r.id === id; }); };
+    const reviewId = t.getAttribute('data-appr-review');
+    if (reviewId){ const r = find(reviewId); if (r) openApprovalReview(r); return; }
+    const cancelId = t.getAttribute('data-appr-cancel');
+    if (cancelId){
+      const r = find(cancelId);
+      if (!r || !confirm('Cancel REQ-' + r.request_no + '?')) return;
+      try{ await post('/api/approvals/' + cancelId + '/cancel'); toast('Request cancelled.', 'ok'); loadApprovals(); refreshBell(); }
+      catch(err){ toast(err.message, 'err'); }
+    }
+  });
+
+  document.getElementById('appr-rules').addEventListener('change', async function(e){
+    const action = e.target.getAttribute && e.target.getAttribute('data-appr-rule');
+    if (!action) return;
+    try{
+      await put('/api/approvals/policies/' + encodeURIComponent(action), { requires_approval: e.target.checked });
+      toast('Rule updated.', 'ok');
+      loadApprovalRules(); loadApprovals();
+    }catch(err){ toast(err.message, 'err'); e.target.checked = !e.target.checked; }
+  });
 
   /* =========================================================================
      DEVICE CATEGORIES (Admin only)

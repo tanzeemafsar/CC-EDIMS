@@ -234,7 +234,8 @@ if ($migrationPresent -eq 't') {
 foreach ($m in @(
     @{ File = 'migration-002.sql'; Marker = 'procurement_thresholds' },
     @{ File = 'migration-003.sql'; Marker = 'device_categories' },
-    @{ File = 'migration-004.sql'; Marker = 'vendors' }
+    @{ File = 'migration-004.sql'; Marker = 'vendors' },
+    @{ File = 'migration-005.sql'; Marker = 'approval_requests' }
 )) {
   $present = Get-SqlScalar -Database $DbName -Sql "SELECT to_regclass('public.$($m.Marker)') IS NOT NULL;"
   if ($present -eq 't') {
