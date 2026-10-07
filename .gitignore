@@ -11,6 +11,9 @@ certs/
 logs/
 *.log
 
+# Uploaded receipts — user data, back these up with the database
+uploads/
+
 # Scraped hardware images — runtime cache, not source
 public/images/hardware/*
 !public/images/hardware/.gitkeep

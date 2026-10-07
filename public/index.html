@@ -287,7 +287,38 @@
   .modal-close{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; line-height:1; padding:2px 6px; }
   .modal-close:hover{ color:var(--text); }
   .modal-body{ padding:18px; }
-  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:14px 18px; border-top:1px solid var(--line); }
+  .modal-foot{ display:flex; justify-content:flex-end; gap:8px; padding:14px 18px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .modal.mid{ width:min(720px, 100%); }
+  .modal.wide{ width:min(1040px, 100%); }
+
+  /* ---------- Labels / catalogue / invoices ---------- */
+  .label-preview{ display:flex; gap:18px; align-items:center; justify-content:center; flex-wrap:wrap;
+    background:#fff; border-radius:8px; padding:16px; margin-bottom:14px; }
+  .label-preview img{ display:block; image-rendering:pixelated; }
+  .label-preview .qr{ width:150px; height:150px; }
+  .label-preview .bar{ max-width:260px; height:80px; }
+  .dl-row{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  .thumb{ width:40px; height:40px; object-fit:contain; background:#fff; border-radius:4px; display:block; }
+  .muted{ color:var(--muted); }
+  .num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .lines-tbl td{ padding:4px 4px; vertical-align:top; }
+  .lines-tbl input, .lines-tbl select{
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    padding:7px 9px; border-radius:var(--radius); font-size:13px; font-family:inherit;
+  }
+  .lines-tbl input:focus, .lines-tbl select:focus{ border-color:var(--accent); outline:none; }
+  .lines-tbl [data-l-remove]{ padding:6px 10px; }
+  a.btn{ text-decoration:none; display:inline-flex; align-items:center; }
+  .totals{ display:grid; grid-template-columns:auto 140px; gap:4px 14px; justify-content:end; margin-top:10px; font-variant-numeric:tabular-nums; }
+  .totals .t{ font-weight:700; font-size:14px; }
+  .section-title{ font-size:11px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); margin:16px 0 8px; }
+  .kv{ display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; font-size:13px; }
+  .kv dt{ color:var(--muted); }
+  .kv dd{ margin:0; }
+  .badge-Draft{ background:rgba(148,163,184,.16); color:var(--muted); }
+  .badge-Issued{ background:rgba(6,182,212,.14); color:var(--accent); }
+  .badge-Paid{ background:rgba(16,185,129,.14); color:var(--assigned); }
+  .badge-Void{ background:rgba(239,68,68,.14); color:var(--faulty); }
 
   /* ---------- Toast ---------- */
   #toast-wrap{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:80; }
@@ -359,6 +390,9 @@
     <button data-view="assets" data-perm="assets:read" title="Assets">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6l7-3.5Z" stroke-linejoin="round"/><path d="M3 6l7 3.5L17 6M10 9.5V17.5" stroke-linejoin="round"/></svg>
       <span class="rail-label">Assets</span></button>
+    <button data-view="catalog" data-perm="assets:read" title="Catalogue">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 3.5h9.5L16 6v10.5H4z" stroke-linejoin="round"/><path d="M7 8h6M7 11h6M7 14h4" stroke-linecap="round"/></svg>
+      <span class="rail-label">Catalogue</span></button>
     <button data-view="employees" data-perm="employees:read" title="Employees">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="6.5" r="3"/><path d="M3.5 17c1-3.5 4-5 6.5-5s5.5 1.5 6.5 5" stroke-linecap="round"/></svg>
       <span class="rail-label">People</span></button>
@@ -368,12 +402,21 @@
     <button data-view="procurement" data-perm="procurement:read" title="Procurement">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h2l1.6 9.2a1.5 1.5 0 0 0 1.5 1.3h6.4a1.5 1.5 0 0 0 1.5-1.2L17 7H6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="17" r="1"/><circle cx="14.5" cy="17" r="1"/></svg>
       <span class="rail-label">Orders</span></button>
+    <button data-view="invoices" data-perm="invoices:read" title="Invoices &amp; receipts">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 2.5h10v15l-2-1.3-1.7 1.3-1.6-1.3-1.7 1.3L6.3 16.2 5 17.5z" stroke-linejoin="round"/><path d="M7.5 7h5M7.5 10h5M7.5 13h3" stroke-linecap="round"/></svg>
+      <span class="rail-label">Invoices</span></button>
     <button data-view="audits" data-perm="audits:read" title="Audits">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 16 4.5V9c0 4.2-2.6 6.9-6 8.5C6.6 15.9 4 13.2 4 9V4.5L10 2.5Z" stroke-linejoin="round"/><path d="M7.3 9.6l1.8 1.8 3.6-3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="rail-label">Audits</span></button>
     <button data-view="hardware" data-perm="assets:read" title="Hardware scraper">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v9m0 0-3-3m3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="rail-label">Scraper</span></button>
+    <button data-view="categories" data-perm="categories:manage" title="Device categories">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="5.5" height="4" rx="1"/><rect x="11.5" y="8" width="5.5" height="4" rx="1"/><rect x="11.5" y="13" width="5.5" height="4" rx="1"/><path d="M5.75 7v8h5.75M5.75 10h5.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="rail-label">Types</span></button>
+    <button data-view="reference" data-perm="assets:read" title="Reference data: vendors &amp; departments">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="10" cy="5" rx="6" ry="2.3"/><path d="M4 5v10c0 1.3 2.7 2.3 6 2.3s6-1 6-2.3V5M4 10c0 1.3 2.7 2.3 6 2.3s6-1 6-2.3" /></svg>
+      <span class="rail-label">Reference</span></button>
     <button data-view="users" data-perm="users:manage" title="Users">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="6" r="2.4"/><circle cx="14" cy="7.5" r="2"/><path d="M2.5 16c.7-2.8 2.4-4.2 4.5-4.2s3.8 1.4 4.5 4.2M12.7 16c.5-2 1.7-3.2 3.3-3.2s2.8 1.2 3.3 3.2" stroke-linecap="round"/></svg>
       <span class="rail-label">Users</span></button>
@@ -447,17 +490,16 @@
             </select>
           </div>
           <div class="field">
-            <label>Device Type</label>
+            <label>Category</label>
             <select id="assets-class">
               <option value="">All</option>
-              <option>MacBook</option><option>Laptop</option><option>Monitor</option>
-              <option>Jabra Headset</option><option>Keyboard</option><option>Mouse</option><option>Peripheral</option>
             </select>
           </div>
           <button class="btn" id="assets-filter-btn">Filter</button>
           <button class="btn btn-primary" id="assets-new-btn" data-perm="assets:write">+ New asset</button>
           <button class="btn" id="assets-export-csv">Export CSV</button>
           <button class="btn" id="assets-export-pdf">Export PDF</button>
+          <button class="btn" id="assets-labels-btn" title="A4 sheet of labels for the devices listed below">Print labels</button>
         </div>
         <div class="panel">
           <div class="tbl-wrap"><table id="assets-table"><thead></thead><tbody></tbody></table></div>
@@ -575,6 +617,85 @@
         </div>
       </section>
 
+      <!-- ---------- CATALOGUE ---------- -->
+      <section class="view" id="view-catalog">
+        <div class="toolbar">
+          <div class="field grow">
+            <label>Search</label>
+            <input id="cat-search" placeholder="Model, vendor, part number…">
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select id="cat-filter"><option value="">All</option></select>
+          </div>
+          <button class="btn" id="catalog-filter-btn">Filter</button>
+          <button class="btn btn-primary" id="catalog-new-btn" data-perm="catalog:write">+ New model</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="catalog-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- INVOICES & RECEIPTS ---------- -->
+      <section class="view" id="view-invoices">
+        <div class="toolbar">
+          <div class="field grow">
+            <label>Search</label>
+            <input id="inv-search" placeholder="Invoice #, vendor, employee, department…">
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <select id="inv-type"><option value="">All</option><option>Chargeback</option><option>Purchase</option></select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="inv-status"><option value="">All</option><option>Draft</option><option>Issued</option><option>Paid</option><option>Void</option></select>
+          </div>
+          <button class="btn" id="inv-filter-btn">Filter</button>
+          <button class="btn btn-primary" id="inv-new-cb" data-perm="invoices:write">+ Chargeback invoice</button>
+          <button class="btn btn-primary" id="inv-new-pur" data-perm="invoices:write">+ Purchase invoice</button>
+          <button class="btn" id="inv-export-csv">Export CSV</button>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="inv-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Receipts</h3>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <label class="hint" style="margin:0;"><input type="checkbox" id="rcpt-unlinked"> Only unattached</label>
+              <button class="btn" id="rcpt-upload-btn" data-perm="assets:write">Upload receipt</button>
+            </div>
+          </div>
+          <div class="tbl-wrap"><table id="rcpt-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------- REFERENCE DATA ---------- -->
+      <section class="view" id="view-reference">
+        <div class="panel">
+          <div class="panel-head"><h3>Vendors &amp; suppliers</h3>
+            <button class="btn btn-primary" data-ref-new="vendors" data-perm="reference:manage">+ Vendor</button></div>
+          <div class="tbl-wrap"><table id="ref-vendors"><thead></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Departments &amp; locations</h3>
+            <button class="btn btn-primary" data-ref-new="locations" data-perm="reference:manage">+ Department</button></div>
+          <div class="tbl-wrap"><table id="ref-locations"><thead></thead><tbody></tbody></table></div>
+        </div>
+        <div class="hint">Renaming an entry renames it on every device, employee, catalogue model and invoice that uses it. Entries in use can't be deleted — deactivate them to hide them from forms.</div>
+      </section>
+
+      <!-- ---------- DEVICE CATEGORIES ---------- -->
+      <section class="view" id="view-categories">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="cat-new-btn">+ New category</button>
+          <span class="hint">Devices are filed under a subcategory. Deactivate a category to hide it from new-device forms without touching existing devices.</span>
+        </div>
+        <div class="panel">
+          <div class="tbl-wrap"><table id="cat-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
       <!-- ---------- USERS ---------- -->
       <section class="view" id="view-users">
         <div class="toolbar">
@@ -669,7 +790,7 @@
     }
     bellList.innerHTML = alerts.slice(0, 20).map(function(a){
       return '<div class="bell-item" data-goto-procurement="1">' +
-        '<div class="bi-class">' + esc(a.hardware_class) + '</div>' +
+        '<div class="bi-class">' + esc(catLabel(a)) + '</div>' +
         '<div class="bi-notes">' + esc(a.notes || 'Low stock') + '</div></div>';
     }).join('');
   }
@@ -781,6 +902,12 @@
     'procurement:write': ['Admin','TAC'],
     'audits:read':       ['Admin','TAC','Viewer'],
     'audits:write':      ['Admin','TAC'],
+    'categories:manage': ['Admin'],
+    'reference:manage':  ['Admin','TAC'],
+    'catalog:write':     ['Admin','TAC'],
+    'invoices:read':     ['Admin','TAC','Viewer'],
+    'invoices:write':    ['Admin','TAC'],
+    'invoices:void':     ['Admin'],
     'users:manage':      ['Admin'],
   };
   let session = null; // { id, username, role, loginAt }
@@ -801,11 +928,15 @@
   const VIEW_META = {
     dashboard:    { title:'Dashboard',    crumb:'/api/dashboard/summary',  perm:'dashboard:read' },
     assets:       { title:'Assets',       crumb:'/api/assets',             perm:'assets:read' },
+    catalog:      { title:'Catalogue',    crumb:'/api/catalog',            perm:'assets:read' },
+    invoices:     { title:'Invoices & receipts', crumb:'/api/invoices',    perm:'invoices:read' },
+    reference:    { title:'Reference data', crumb:'/api/reference',        perm:'assets:read' },
     employees:    { title:'Employees',    crumb:'/api/employees',          perm:'employees:read' },
     assignments:  { title:'Assignments',  crumb:'/api/assignments',        perm:'assets:read' },
     procurement:  { title:'Procurement',  crumb:'/api/procurement',        perm:'procurement:read' },
     audits:       { title:'Audits',       crumb:'/api/audits',             perm:'audits:read' },
     hardware:     { title:'Hardware scraper', crumb:'/api/hardware/scrape', perm:'assets:read' },
+    categories:   { title:'Device categories', crumb:'/api/categories',    perm:'categories:manage' },
     users:        { title:'Users',        crumb:'/api/users',              perm:'users:manage' },
   };
   const loaders = {}; // view -> fn() called each time the view is shown
@@ -860,7 +991,12 @@
   const modalBody  = document.getElementById('modal-body');
   const modalFoot  = document.getElementById('modal-foot');
 
-  function openModal(title, bodyHtml, footButtons){
+  // size: undefined (narrow form), 'mid' or 'wide'
+  function openModal(title, bodyHtml, footButtons, size){
+    modalBackdrop.querySelector('.modal').className = 'modal' + (size ? ' ' + size : '');
+    // Modals that need delegated events set these after opening; clear the
+    // previous modal's so they never leak into this one.
+    modalBody.onclick = null; modalBody.oninput = null; modalBody.onchange = null;
     modalTitle.textContent = title;
     modalBody.innerHTML = bodyHtml;
     modalFoot.innerHTML = '';
@@ -888,7 +1024,10 @@
   }
   function fmtDate(v){
     if (!v) return '—';
-    const d = new Date(v);
+    // Plain dates ('YYYY-MM-DD') are calendar days — build them in local
+    // time so they don't shift a day west of UTC.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
     if (isNaN(d)) return esc(v);
     return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
   }
@@ -939,6 +1078,105 @@
   }
 
   /* =========================================================================
+     DEVICE CATEGORIES — shared cache + picker helpers
+     Tree shape from GET /api/categories:
+       [{ id, name, is_active, subcategories:[{ id, name, is_active, ... }] }]
+     ========================================================================= */
+  let categoryTree = null;
+  async function loadCategoryTree(force){
+    if (categoryTree && !force) return categoryTree;
+    const d = await get('/api/categories');
+    categoryTree = d.categories || [];
+    return categoryTree;
+  }
+  // "Computers › MacBook" for any row carrying category + subcategory
+  function catLabel(r){
+    if (!r || !r.subcategory) return '—';
+    return r.category + ' › ' + r.subcategory;
+  }
+  // <option>s for choosing a subcategory, grouped by category. Inactive
+  // entries are hidden unless they're the current value (so editing an old
+  // device doesn't silently change its category).
+  function subcategoryOptionsHtml(selectedId){
+    return (categoryTree || []).map(function(cat){
+      const opts = cat.subcategories.filter(function(s){
+        return (cat.is_active && s.is_active) || s.id === selectedId;
+      }).map(function(s){
+        const off = !(cat.is_active && s.is_active);
+        return '<option value="' + s.id + '"' + (s.id === selectedId ? ' selected' : '') + '>' +
+          esc(s.name) + (off ? ' (inactive)' : '') + '</option>';
+      }).join('');
+      return opts ? '<optgroup label="' + esc(cat.name) + '">' + opts + '</optgroup>' : '';
+    }).join('');
+  }
+  /* =========================================================================
+     REFERENCE DATA / CATALOGUE — shared caches + picker helpers
+     ========================================================================= */
+  let refCache = { vendors: null, locations: null };
+  async function loadReference(force){
+    if (refCache.vendors && !force) return refCache;
+    const [v, l] = await Promise.all([get('/api/reference/vendors'), get('/api/reference/locations')]);
+    refCache = { vendors: v.vendors || [], locations: l.locations || [] };
+    return refCache;
+  }
+  // <option>s for a vendor/department <select>: active entries, plus the
+  // current value even if it's been deactivated.
+  function refOptionsHtml(list, current, blankLabel){
+    let html = '<option value="">' + esc(blankLabel || '— None —') + '</option>';
+    (list || []).forEach(function(r){
+      if (!r.is_active && r.name !== current) return;
+      html += '<option value="' + esc(r.name) + '"' + (r.name === current ? ' selected' : '') + '>' +
+        esc(r.name) + (r.is_active ? '' : ' (inactive)') + '</option>';
+    });
+    if (current && !(list || []).some(function(r){ return r.name === current; }))
+      html += '<option value="' + esc(current) + '" selected>' + esc(current) + '</option>';
+    return html;
+  }
+
+  let catalogCache = null; // active catalogue items, for the device form
+  async function loadCatalogItems(force){
+    if (catalogCache && !force) return catalogCache;
+    const d = await get('/api/catalog?active=1');
+    catalogCache = d.items || [];
+    return catalogCache;
+  }
+
+  // Receipts go up as the raw file body; metadata rides in the query string.
+  async function uploadReceipt(file, params){
+    if (file.size > 10 * 1024 * 1024) throw new Error(file.name + ' is over the 10 MB limit.');
+    const q = new URLSearchParams(params || {});
+    q.set('filename', file.name);
+    let res;
+    try{
+      res = await fetch('/api/receipts?' + q.toString(), {
+        method: 'POST', credentials: 'same-origin', body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      });
+    }catch(e){ throw new Error('Network error — is the server reachable?'); }
+    const data = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw new Error(data.error || ('Upload failed (' + res.status + ')'));
+    return data;
+  }
+
+  function fmtBytes(n){
+    if (n == null) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  // Filter dropdown: each category (matches all its subcategories), then
+  // its subcategories indented beneath it.
+  function categoryFilterOptionsHtml(selectedId){
+    return '<option value="">All</option>' + (categoryTree || []).map(function(cat){
+      return '<option value="' + cat.id + '"' + (cat.id === selectedId ? ' selected' : '') + '>' + esc(cat.name) + ' (all)</option>' +
+        cat.subcategories.map(function(s){
+          return '<option value="' + s.id + '"' + (s.id === selectedId ? ' selected' : '') + '>&nbsp;&nbsp;&nbsp;' + esc(s.name) + '</option>';
+        }).join('');
+    }).join('');
+  }
+
+  /* =========================================================================
      AUTH
      ========================================================================= */
   const loginForm    = document.getElementById('login-form');
@@ -953,7 +1191,8 @@
     applyPermissionVisibility();
     // Land on the URL's hash view if it's valid and permitted; otherwise
     // fall back to the first view this role can actually see.
-    const order = ['dashboard','assets','employees','assignments','procurement','audits','hardware','users'];
+    const order = ['dashboard','assets','catalog','employees','assignments','procurement','invoices','audits','hardware','categories','reference','users'];
+    consumeAssetLink();
     const hashView = viewFromHash();
     const landing = (hashView && can(VIEW_META[hashView].perm))
       ? hashView
@@ -961,6 +1200,22 @@
     showView(landing);
     startPolling();
   }
+
+  // Scanned QR code: #asset=<tag> opens the asset list filtered to that
+  // device. Handled on load (enterApp) and when the hash changes in an
+  // already-open tab.
+  function consumeAssetLink(){
+    const m = /^#asset=(.+)$/.exec(window.location.hash || '');
+    if (!m || !can('assets:read')) return false;
+    let tag = m[1];
+    try{ tag = decodeURIComponent(tag); }catch(e){}
+    document.getElementById('assets-search').value = tag;
+    history.replaceState(null, '', '#assets');
+    return true;
+  }
+  window.addEventListener('hashchange', function(){
+    if (session && consumeAssetLink()) showView('assets');
+  });
 
   function exitApp(){
     session = null;
@@ -1052,7 +1307,7 @@
       const byClassTbl = document.getElementById('dash-byclass');
       setHead(byClassTbl, ['Device Type','Total','Assigned','In-hand','Faulty','Ordered','Need order','Retired']);
       setRows(byClassTbl, (d.byClass || []).map(function(r){
-        return '<tr><td>' + esc(r.class) + '</td><td class="mono">' + esc(r.total) + '</td><td class="mono">' + esc(r.assigned) +
+        return '<tr><td>' + esc(catLabel(r)) + '</td><td class="mono">' + esc(r.total) + '</td><td class="mono">' + esc(r.assigned) +
           '</td><td class="mono">' + esc(r.in_hand) + '</td><td class="mono">' + esc(r.faulty) + '</td><td class="mono">' + esc(r.ordered) +
           '</td><td class="mono">' + esc(r.need_to_order) + '</td><td class="mono">' + esc(r.retired) + '</td></tr>';
       }), 8, 'No inventory data yet.');
@@ -1060,7 +1315,7 @@
       const expTbl = document.getElementById('dash-expiring');
       setHead(expTbl, ['Asset tag','Device Type','Model','Warranty expiry']);
       setRows(expTbl, (d.expiringWarranties || []).map(function(r){
-        return '<tr><td class="mono">' + esc(r.asset_tag) + '</td><td>' + esc(r.hardware_class) + '</td><td>' + esc(r.model) +
+        return '<tr><td class="mono">' + esc(r.asset_tag) + '</td><td>' + esc(catLabel(r)) + '</td><td>' + esc(r.model) +
           '</td><td>' + fmtDate(r.warranty_expiry) + '</td></tr>';
       }), 4, 'Nothing expiring in the next 90 days.');
 
@@ -1084,7 +1339,6 @@
   /* =========================================================================
      ASSETS
      ========================================================================= */
-  const VALID_CLASSES = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral'];
   const VALID_ASSET_STATUS = ['Assigned','In-Hand','Faulty','Ordered','Need to Order'];
   let assetsOffset = 0;
   const ASSETS_LIMIT = 50;
@@ -1096,7 +1350,7 @@
     const cls    = document.getElementById('assets-class').value;
     if (search) q.set('search', search);
     if (status) q.set('status', status);
-    if (cls)    q.set('hardware_class', cls);
+    if (cls)    q.set('category_id', cls);
     q.set('limit', ASSETS_LIMIT);
     q.set('offset', assetsOffset);
 
@@ -1106,8 +1360,12 @@
       const d = await get('/api/assets?' + q.toString());
       document.getElementById('assets-count').textContent =
         d.count + ' result' + (d.count === 1 ? '' : 's') + ' · offset ' + assetsOffset;
+      lastAssetPage = d.assets;
       setRows(tbl, d.assets.map(function(a){
-        const actions = [];
+        const actions = [
+          '<button class="btn" data-label-asset="' + a.id + '">Label</button>',
+          '<button class="btn" data-receipts-asset="' + a.id + '">Receipts' + (a.receipt_count ? ' (' + a.receipt_count + ')' : '') + '</button>',
+        ];
         if (can('assets:write')) actions.push('<button class="btn" data-edit-asset="' + a.id + '">Edit</button>');
         if (can('assets:status')){
           if (a.status !== 'Faulty' && a.status !== 'Retired') actions.push('<button class="btn" data-status-asset="' + a.id + '" data-action="mark_faulty">Mark faulty</button>');
@@ -1119,7 +1377,7 @@
         return '<tr>' +
           '<td class="mono">' + esc(a.asset_tag) + '</td>' +
           '<td class="mono">' + esc(a.serial_number) + '</td>' +
-          '<td>' + esc(a.hardware_class) + '</td>' +
+          '<td>' + esc(catLabel(a)) + '</td>' +
           '<td>' + esc(a.model) + '</td>' +
           '<td>' + badge(a.status) + '</td>' +
           '<td>' + esc(a.location || '—') + '</td>' +
@@ -1133,7 +1391,15 @@
       toast(err.message, 'err');
     }
   }
-  loaders.assets = function(){ assetsOffset = 0; loadAssets(); };
+  loaders.assets = async function(){
+    assetsOffset = 0;
+    const sel = document.getElementById('assets-class');
+    try{
+      await loadCategoryTree(true);
+      sel.innerHTML = categoryFilterOptionsHtml(sel.value);
+    }catch(err){ /* filter just stays at "All" — the list itself still loads */ }
+    loadAssets();
+  };
 
   document.getElementById('assets-filter-btn').addEventListener('click', function(){ assetsOffset = 0; loadAssets(); });
   document.getElementById('assets-search').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ assetsOffset = 0; loadAssets(); } });
@@ -1144,138 +1410,176 @@
 
   function assetFormHtml(a){
     a = a || {};
-    return (a.id ? '' : field('Use existing device (optional)',
-        '<select id="f-template"><option value="">— Select to autofill from inventory history —</option></select>' +
-        '<div class="hint">Picks up device type, vendor, model, price and depreciation from a device you already have. Tag, serial and status are still yours to fill in.</div>')) +
+    const catalogOpts = (catalogCache || []).map(function(ci){
+      return '<option value="' + ci.id + '"' + (ci.id === a.catalog_item_id ? ' selected' : '') + '>' +
+        esc([ci.vendor, ci.model].filter(Boolean).join(' ')) + '  ·  ' + esc(catLabel(ci)) +
+        (ci.standard_price != null ? '  ·  ' + esc(fmtMoney(ci.standard_price)) : '') + '</option>';
+    }).join('');
+    return (a.id ? '' : field('From catalogue (recommended)',
+        '<select id="f-catalog_item_id"><option value="">— Pick an approved model to fill the form —</option>' + catalogOpts + '</select>' +
+        '<div class="hint">Fills category, vendor, model, standard price, depreciation and warranty (from the purchase date). Tag and serial are still yours to fill in.</div>')) +
       '<div class="grid-2">' +
       field('Asset tag*', '<input id="f-asset_tag" value="' + esc(a.asset_tag||'') + '" ' + (a.id?'disabled':'') + '>') +
       field('Serial number*', '<input id="f-serial_number" value="' + esc(a.serial_number||'') + '" ' + (a.id?'disabled':'') + '>') +
-      field('Device Type*', '<select id="f-hardware_class" ' + (a.id?'disabled':'') + '>' +
-        VALID_CLASSES.map(function(c){ return '<option ' + (a.hardware_class===c?'selected':'') + '>' + c + '</option>'; }).join('') + '</select>') +
+      field('Category*', '<select id="f-category_id">' + subcategoryOptionsHtml(a.category_id) + '</select>') +
       field('Model*', '<input id="f-model" list="dl-model" value="' + esc(a.model||'') + '"><datalist id="dl-model"></datalist>') +
-      field('Vendor', '<input id="f-vendor" list="dl-vendor" value="' + esc(a.vendor||'') + '"><datalist id="dl-vendor"></datalist>') +
-      field('QR code', '<input id="f-qr_code" value="' + esc(a.qr_code||'') + '">') +
+      field('Vendor', '<select id="f-vendor">' + refOptionsHtml(refCache.vendors, a.vendor) + '</select>') +
+      field('QR code', '<input id="f-qr_code" value="' + esc(a.qr_code||'') + '" placeholder="Optional existing label code">') +
       field('Status', '<select id="f-status" ' + (a.id?'disabled':'') + '>' +
         VALID_ASSET_STATUS.map(function(s){
           const isSelected = a.status ? a.status === s : s === 'In-Hand'; // new assets default to In-Hand, not Assigned — there's no assignment yet
           return '<option ' + (isSelected?'selected':'') + '>' + s + '</option>';
         }).join('') + '</select>') +
-      field('Department', '<input id="f-location" value="' + esc(a.location||'') + '">') +
+      field('Department', '<select id="f-location">' + refOptionsHtml(refCache.locations, a.location) + '</select>') +
       field('Purchase price', '<input id="f-purchase_price" type="number" step="0.01" value="' + esc(a.purchase_price||'') + '">') +
       field('Purchase date', '<input id="f-purchase_date" type="date" value="' + esc((a.purchase_date||'').slice(0,10)) + '">') +
       field('Warranty expiry', '<input id="f-warranty_expiry" type="date" value="' + esc((a.warranty_expiry||'').slice(0,10)) + '">') +
       field('Depreciation (yrs)', '<input id="f-depreciation_years" type="number" value="' + esc(a.depreciation_years||'') + '">') +
       '</div>' + field('Notes', '<textarea id="f-notes" rows="2">' + esc(a.notes||'') + '</textarea>') +
-      (a.id ? '<div class="hint">Asset tag, serial and device type are immutable. Use status actions to change lifecycle state.</div>' : '');
+      (a.id ? '<div class="hint">Asset tag and serial are immutable. Changing the category is recorded in the asset history. Use status actions to change lifecycle state.</div>' : '');
   }
 
-  // Populates the vendor/model <datalist> suggestions for whatever device
-  // type is currently selected, so retyping "Dell Latitude 5420" from
-  // scratch isn't necessary once it exists anywhere in inventory.
+  // Populates the model <datalist> suggestions for whatever subcategory is
+  // currently selected, so retyping "Latitude 5420" from scratch isn't
+  // necessary once it exists anywhere in inventory.
   async function refreshModelSuggestions(){
-    const classSel = document.getElementById('f-hardware_class');
+    const classSel = document.getElementById('f-category_id');
     const dlModel  = document.getElementById('dl-model');
-    const dlVendor = document.getElementById('dl-vendor');
-    if (!classSel || !dlModel || !dlVendor) return;
+    if (!classSel || !classSel.value || !dlModel) return;
     try{
-      const d = await get('/api/assets/suggestions?hardware_class=' + encodeURIComponent(classSel.value));
-      const seenModels = new Set(), seenVendors = new Set();
-      let modelOpts = '', vendorOpts = '';
-      (d.suggestions || []).forEach(function(s){
-        if (s.model && !seenModels.has(s.model)){ seenModels.add(s.model); modelOpts += '<option value="' + esc(s.model) + '">'; }
-        if (s.vendor && !seenVendors.has(s.vendor)){ seenVendors.add(s.vendor); vendorOpts += '<option value="' + esc(s.vendor) + '">'; }
-      });
-      dlModel.innerHTML  = modelOpts;
-      dlVendor.innerHTML = vendorOpts;
+      const d = await get('/api/assets/suggestions?category_id=' + encodeURIComponent(classSel.value));
+      const seen = new Set();
+      dlModel.innerHTML = (d.suggestions || []).filter(function(s){
+        if (!s.model || seen.has(s.model)) return false;
+        seen.add(s.model); return true;
+      }).map(function(s){ return '<option value="' + esc(s.model) + '">'; }).join('');
     }catch(err){ /* suggestions are a nicety — don't block form use if this fails */ }
   }
 
-  // Populates the "Use existing device" template dropdown with every
-  // distinct vendor/model combo already in inventory, across all device
-  // types, and wires it to autofill the rest of the form on selection.
-  async function wireAssetTemplateSelect(){
-    const sel = document.getElementById('f-template');
-    if (!sel) return;
-    sel.disabled = true;
-    sel.innerHTML = '<option value="">Loading inventory history…</option>';
-    try{
-      const d = await get('/api/assets/suggestions');
-      const suggestions = d.suggestions || [];
-      sel.innerHTML = '<option value="">— Select to autofill from inventory history —</option>';
-      if (!suggestions.length){
-        sel.innerHTML = '<option value="">No existing devices to suggest yet — this looks like the first of its kind</option>';
-        sel.disabled = false;
-        return;
-      }
-      suggestions.forEach(function(s, i){
-        const opt = document.createElement('option');
-        opt.value = String(i);
-        opt.textContent = (s.vendor ? s.vendor + ' ' : '') + s.model + '  ·  ' + s.hardware_class;
-        opt.dataset.class     = s.hardware_class;
-        opt.dataset.vendor    = s.vendor || '';
-        opt.dataset.model     = s.model || '';
-        opt.dataset.price     = s.purchase_price || '';
-        opt.dataset.dep       = s.depreciation_years || '';
-        opt.dataset.location  = s.location || '';
-        opt.dataset.purchase  = s.purchase_date ? String(s.purchase_date).slice(0,10) : '';
-        opt.dataset.warranty  = s.warranty_expiry ? String(s.warranty_expiry).slice(0,10) : '';
-        sel.appendChild(opt);
-      });
-      sel.disabled = false;
-    }catch(err){
-      sel.innerHTML = '<option value="">Could not load inventory history — ' + esc(err.message) + '</option>';
-      sel.disabled = false;
-    }
-
-    sel.addEventListener('change', function(){
-      const opt = sel.selectedOptions[0];
-      if (!opt || !opt.value) return;
-      // Autofills everything EXCEPT the fields that must be unique per unit:
-      // asset tag, serial number, and QR code stay blank/yours to fill in.
-      document.getElementById('f-hardware_class').value = opt.dataset.class;
-      document.getElementById('f-vendor').value = opt.dataset.vendor;
-      document.getElementById('f-model').value = opt.dataset.model;
-      document.getElementById('f-location').value = opt.dataset.location;
-      if (opt.dataset.price)    document.getElementById('f-purchase_price').value = opt.dataset.price;
-      if (opt.dataset.dep)      document.getElementById('f-depreciation_years').value = opt.dataset.dep;
-      if (opt.dataset.purchase) document.getElementById('f-purchase_date').value = opt.dataset.purchase;
-      if (opt.dataset.warranty) document.getElementById('f-warranty_expiry').value = opt.dataset.warranty;
-      refreshModelSuggestions();
-      toast('Autofilled from ' + opt.textContent + '. Just fill in tag, serial, and status.', 'ok');
-    });
+  // Warranty expiry = purchase date + N months (as a YYYY-MM-DD string)
+  function addMonths(isoDate, months){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate || '');
+    if (!m || months == null) return '';
+    const d = new Date(Date.UTC(+m[1], +m[2] - 1 + Number(months), +m[3]));
+    return d.toISOString().slice(0, 10);
   }
 
-  document.getElementById('assets-new-btn').addEventListener('click', function(){
-    openModal('New asset', assetFormHtml(), [
+  // Picking a catalogue model fills the rest of the device form from it.
+  function wireCatalogSelect(){
+    const sel = document.getElementById('f-catalog_item_id');
+    if (!sel) return;
+    function selected(){ return (catalogCache || []).find(function(c){ return c.id === sel.value; }); }
+    function fillWarranty(){
+      const ci = selected();
+      const pd = document.getElementById('f-purchase_date').value;
+      if (ci && ci.warranty_months != null && pd) document.getElementById('f-warranty_expiry').value = addMonths(pd, ci.warranty_months);
+    }
+    sel.addEventListener('change', function(){
+      const ci = selected();
+      if (!ci) return;
+      const catSel = document.getElementById('f-category_id');
+      if (catSel.querySelector('option[value="' + CSS.escape(ci.category_id) + '"]')) catSel.value = ci.category_id;
+      document.getElementById('f-model').value = ci.model;
+      const vSel = document.getElementById('f-vendor');
+      if (ci.vendor && !vSel.querySelector('option[value="' + CSS.escape(ci.vendor) + '"]')){
+        vSel.insertAdjacentHTML('beforeend', '<option value="' + esc(ci.vendor) + '">' + esc(ci.vendor) + '</option>');
+      }
+      vSel.value = ci.vendor || '';
+      if (ci.standard_price != null) document.getElementById('f-purchase_price').value = ci.standard_price;
+      if (ci.depreciation_years != null) document.getElementById('f-depreciation_years').value = ci.depreciation_years;
+      fillWarranty();
+      refreshModelSuggestions();
+    });
+    document.getElementById('f-purchase_date').addEventListener('change', fillWarranty);
+  }
+
+  // Everything the device form needs: category tree, vendor/department
+  // lists and the catalogue. False (with a toast) if it can't be used.
+  async function ensureCategoriesForForm(){
+    try{ await Promise.all([loadCategoryTree(true), loadReference(true), loadCatalogItems(true)]); }
+    catch(err){ toast('Could not load form data — ' + err.message, 'err'); return false; }
+    if (!subcategoryOptionsHtml()){
+      toast('No active device subcategories yet. An Admin can add them under Types.', 'err');
+      return false;
+    }
+    return true;
+  }
+
+  function readNewAssetForm(){
+    const cat = document.getElementById('f-catalog_item_id');
+    return {
+      catalog_item_id: (cat && cat.value) || null,
+      asset_tag: document.getElementById('f-asset_tag').value.trim(),
+      serial_number: document.getElementById('f-serial_number').value.trim(),
+      category_id: document.getElementById('f-category_id').value,
+      model: document.getElementById('f-model').value.trim(),
+      vendor: document.getElementById('f-vendor').value || null,
+      qr_code: document.getElementById('f-qr_code').value.trim() || null,
+      status: document.getElementById('f-status').value,
+      location: document.getElementById('f-location').value || null,
+      purchase_price: document.getElementById('f-purchase_price').value || null,
+      purchase_date: document.getElementById('f-purchase_date').value || null,
+      warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
+      depreciation_years: document.getElementById('f-depreciation_years').value || null,
+      notes: document.getElementById('f-notes').value.trim() || null,
+    };
+  }
+
+  // Opens the new-device form (optionally prefilled); on success shows the
+  // device's label so it can be printed straight away.
+  async function openNewAssetModal(prefill, title, after){
+    if (!(await ensureCategoriesForForm())) return;
+    openModal(title || 'New asset', assetFormHtml(prefill), [
       { label:'Cancel', onClick:closeModal },
       { label:'Create', cls:'btn-primary', onClick: async function(){
-          const body = {
-            asset_tag: document.getElementById('f-asset_tag').value.trim(),
-            serial_number: document.getElementById('f-serial_number').value.trim(),
-            hardware_class: document.getElementById('f-hardware_class').value,
-            model: document.getElementById('f-model').value.trim(),
-            vendor: document.getElementById('f-vendor').value.trim() || null,
-            qr_code: document.getElementById('f-qr_code').value.trim() || null,
-            status: document.getElementById('f-status').value,
-            location: document.getElementById('f-location').value.trim() || null,
-            purchase_price: document.getElementById('f-purchase_price').value || null,
-            purchase_date: document.getElementById('f-purchase_date').value || null,
-            warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
-            depreciation_years: document.getElementById('f-depreciation_years').value || null,
-            notes: document.getElementById('f-notes').value.trim() || null,
-          };
           try{
-            await post('/api/assets', body);
-            toast('Asset registered.', 'ok');
-            closeModal(); loadAssets();
+            const d = await post('/api/assets', readNewAssetForm());
+            toast('Asset ' + d.asset.asset_tag + ' registered.', 'ok');
+            if (after) after();
+            if (document.getElementById('view-assets').classList.contains('active')) loadAssets();
+            openLabelModal(d.asset, true);
           }catch(err){ toast(err.message, 'err'); }
         } },
-    ]);
-    // Wire up the "use existing device" template dropdown and vendor/model
-    // suggestions once the form is actually in the DOM.
-    wireAssetTemplateSelect();
+    ], 'mid');
+    wireCatalogSelect();
+    if (prefill && prefill.catalog_item_id) document.getElementById('f-catalog_item_id').dispatchEvent(new Event('change'));
     refreshModelSuggestions();
-    document.getElementById('f-hardware_class').addEventListener('change', refreshModelSuggestions);
+    document.getElementById('f-category_id').addEventListener('change', refreshModelSuggestions);
+  }
+
+  document.getElementById('assets-new-btn').addEventListener('click', function(){ openNewAssetModal(); });
+
+  /* ---------- Barcode / QR label ---------- */
+  function openLabelModal(a, justCreated){
+    const base = '/api/labels/' + a.id + '/';
+    const t = Date.now(); // tag could have changed; don't show a cached image
+    openModal((justCreated ? 'Registered · ' : 'Label · ') + a.asset_tag,
+      (justCreated ? '<div class="hint" style="margin:0 0 10px;">Device saved. Print its label now, or later from the Label button on the Assets list.</div>' : '') +
+      '<div class="label-preview">' +
+        '<img class="qr" alt="QR code for ' + esc(a.asset_tag) + '" src="' + base + 'qr.png?t=' + t + '">' +
+        '<div style="text-align:center;color:#111;">' +
+          '<img class="bar" alt="Barcode for ' + esc(a.asset_tag) + '" src="' + base + 'barcode.png?t=' + t + '">' +
+          '<div style="font:600 15px/1.4 monospace;margin-top:4px;">' + esc(a.asset_tag) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hint" style="text-align:center;margin-bottom:10px;">The QR code opens this device in EDIMS; the barcode is the asset tag (Code 128) for USB scanners.</div>' +
+      '<div class="dl-row">' +
+        '<a class="btn" href="' + base + 'qr.png?download=1">QR · PNG</a>' +
+        '<a class="btn" href="' + base + 'qr.svg?download=1">QR · SVG</a>' +
+        '<a class="btn" href="' + base + 'barcode.png?download=1">Barcode · PNG</a>' +
+        '<a class="btn" href="' + base + 'barcode.svg?download=1">Barcode · SVG</a>' +
+      '</div>',
+      [
+        { label:'Close', onClick:closeModal },
+        { label:'Download label (PDF)', cls:'btn-primary', onClick: function(){ download(base + 'label.pdf'); } },
+      ]);
+  }
+
+  let lastAssetPage = [];
+  document.getElementById('assets-labels-btn').addEventListener('click', function(){
+    if (!lastAssetPage.length){ toast('No devices listed to print labels for.', 'err'); return; }
+    download('/api/labels/sheet.pdf?ids=' + lastAssetPage.map(function(a){ return a.id; }).join(','));
+    toast('Label sheet for ' + lastAssetPage.length + ' device(s) — A4, 3 × 8 (Avery L7159).', 'ok');
   });
 
   document.getElementById('content').addEventListener('click', async function(e){
@@ -1283,14 +1587,32 @@
     const statusId = e.target.getAttribute && e.target.getAttribute('data-status-asset');
     const histId = e.target.getAttribute && e.target.getAttribute('data-history-asset');
 
+    const labelId = e.target.getAttribute && e.target.getAttribute('data-label-asset');
+    if (labelId){
+      const a = lastAssetPage.find(function(x){ return x.id === labelId; });
+      if (a) openLabelModal(a);
+      return;
+    }
+    const rcptAssetId = e.target.getAttribute && e.target.getAttribute('data-receipts-asset');
+    if (rcptAssetId){
+      const a = lastAssetPage.find(function(x){ return x.id === rcptAssetId; });
+      if (a) openAssetReceipts(a);
+      return;
+    }
+
     if (editId){
       try{
-        const d = await get('/api/assets?search=&limit=500'); // fetch then find — keeps a single source of truth from list endpoint
+        const [d] = await Promise.all([
+          get('/api/assets?search=&limit=500'), // fetch then find — keeps a single source of truth from list endpoint
+          loadCategoryTree(true),
+          loadReference(true),
+        ]);
         const asset = d.assets.find(function(a){ return a.id === editId; }) || {};
         openModal('Edit asset · ' + asset.asset_tag, assetFormHtml(Object.assign({id:editId}, asset)), [
           { label:'Cancel', onClick:closeModal },
           { label:'Save', cls:'btn-primary', onClick: async function(){
               const body = {
+                category_id: document.getElementById('f-category_id').value,
                 model: document.getElementById('f-model').value.trim(),
                 vendor: document.getElementById('f-vendor').value.trim() || null,
                 qr_code: document.getElementById('f-qr_code').value.trim() || null,
@@ -1309,6 +1631,7 @@
             } },
         ]);
         refreshModelSuggestions();
+        document.getElementById('f-category_id').addEventListener('change', refreshModelSuggestions);
       }catch(err){ toast(err.message, 'err'); }
       return;
     }
@@ -1395,7 +1718,7 @@
       field('Full name*', '<input id="f-full_name" value="' + esc(emp.full_name||'') + '">') +
       field('Email*', '<input id="f-email" type="email" value="' + esc(emp.email||'') + '">') +
       field('Phone', '<input id="f-phone" value="' + esc(emp.phone||'') + '">') +
-      field('Department', '<input id="f-department" value="' + esc(emp.department||'') + '">') +
+      field('Department', '<select id="f-department">' + refOptionsHtml(refCache.locations, emp.department) + '</select>') +
       field('Designation', '<input id="f-designation" value="' + esc(emp.designation||'') + '">') +
       field('Status', '<select id="f-status">' + ['Active','Inactive','Offboarded'].map(function(s){
         return '<option ' + (emp.status===s?'selected':'') + '>' + s + '</option>'; }).join('') + '</select>') +
@@ -1403,7 +1726,8 @@
       '</div>' + field('Notes', '<textarea id="f-notes" rows="2">' + esc(emp.notes||'') + '</textarea>');
   }
 
-  document.getElementById('emp-new-btn').addEventListener('click', function(){
+  document.getElementById('emp-new-btn').addEventListener('click', async function(){
+    try{ await loadReference(true); }catch(err){ toast('Could not load departments — ' + err.message, 'err'); return; }
     openModal('New employee', empFormHtml(), [
       { label:'Cancel', onClick:closeModal },
       { label:'Create', cls:'btn-primary', onClick: async function(){
@@ -1431,7 +1755,7 @@
     const editEmpId = e.target.getAttribute && e.target.getAttribute('data-edit-emp');
     if (!editEmpId) return;
     try{
-      const d = await get('/api/employees?limit=500');
+      const [d] = await Promise.all([get('/api/employees?limit=500'), loadReference(true)]);
       const emp = d.employees.find(function(x){ return x.id === editEmpId; }) || {};
       openModal('Edit employee · ' + emp.full_name, empFormHtml(Object.assign({id:editEmpId}, emp)), [
         { label:'Cancel', onClick:closeModal },
@@ -1468,7 +1792,7 @@
         const actions = can('assignments:write')
           ? '<button class="btn btn-danger" data-return-asset="' + a.asset_id + '">Return</button>'
           : '';
-        return '<tr><td class="mono">' + esc(a.asset_tag) + '</td><td>' + esc(a.hardware_class) + '</td><td>' + esc(a.model) +
+        return '<tr><td class="mono">' + esc(a.asset_tag) + '</td><td>' + esc(catLabel(a)) + '</td><td>' + esc(a.model) +
           '</td><td>' + esc(a.full_name) + ' <span class="mono" style="color:var(--muted)">(' + esc(a.employee_code) + ')</span></td><td>' +
           esc(a.department || '—') + '</td><td class="mono">' + fmtDateTime(a.assigned_at) + '</td><td>' + esc(a.assigned_by_username) +
           '</td><td>' + actions + '</td></tr>';
@@ -1541,10 +1865,10 @@
         const thresholdCell = can('procurement:write')
           ? '<div style="display:flex;gap:6px;align-items:center;">' +
               '<input type="number" min="0" step="1" value="' + esc(r.threshold_qty == null ? 5 : r.threshold_qty) +
-              '" data-threshold-input="' + esc(r.hardware_class) + '" style="width:64px;">' +
-              '<button class="btn" data-save-threshold="' + esc(r.hardware_class) + '">Save</button></div>'
+              '" data-threshold-input="' + esc(r.category_id) + '" style="width:64px;">' +
+              '<button class="btn" data-save-threshold="' + esc(r.category_id) + '" data-threshold-label="' + esc(catLabel(r)) + '">Save</button></div>'
           : esc(r.threshold_qty == null ? 5 : r.threshold_qty);
-        return '<tr><td>' + esc(r.hardware_class) + '</td><td class="mono">' + esc(r.current_stock) + '</td><td>' + thresholdCell +
+        return '<tr><td>' + esc(catLabel(r)) + '</td><td class="mono">' + esc(r.current_stock) + '</td><td>' + thresholdCell +
           '</td><td><span class="badge badge-' + esc(r.threshold_status) +
           '" style="background:transparent;border:1px solid currentColor;color:var(--' + tCls + ',var(--muted))">' +
           esc(r.threshold_status) + '</span></td><td class="mono">' + esc(r.open_alerts) + '</td><td class="mono">' + fmtDate(r.latest_alert_date) + '</td></tr>';
@@ -1554,7 +1878,7 @@
         const actions = (!a.resolved_at && can('procurement:write'))
           ? '<button class="btn" data-resolve-alert="' + a.id + '">Resolve</button>'
           : (a.resolved_at ? '<span class="hint">Resolved by ' + esc(a.resolved_by_username || '—') + '</span>' : '—');
-        return '<tr><td>' + esc(a.hardware_class) + '</td><td class="mono">' + fmtDateTime(a.created_at) + '</td><td>' + esc(a.notes || '—') +
+        return '<tr><td>' + esc(catLabel(a)) + '</td><td class="mono">' + fmtDateTime(a.created_at) + '</td><td>' + esc(a.notes || '—') +
           '</td><td>' + (a.resolved_at ? badge('Verified') : '<span class="badge badge-Faulty">Open</span>') + '</td><td>' + actions + '</td></tr>';
       }), 5, 'No procurement alerts.');
     }catch(err){
@@ -1588,25 +1912,24 @@
       if (!Number.isInteger(val) || val < 0){ toast('Threshold must be a non-negative whole number.', 'err'); return; }
       try{
         await put('/api/procurement/thresholds/' + encodeURIComponent(thresholdClass), { threshold_qty: val });
-        toast(esc(thresholdClass) + ' threshold set to ' + val + '.', 'ok');
+        toast(e.target.getAttribute('data-threshold-label') + ' threshold set to ' + val + '.', 'ok');
         loadProcurement(); refreshBell();
       }catch(err){ toast(err.message, 'err'); }
       return;
     }
   });
 
-  document.getElementById('proc-new-order-btn').addEventListener('click', function(){
-    const classOptions = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral']
-      .map(function(c){ return '<option>' + c + '</option>'; }).join('');
+  document.getElementById('proc-new-order-btn').addEventListener('click', async function(){
+    if (!(await ensureCategoriesForForm())) return;
     openModal('New order', ''
-      + field('Device Type*', '<select id="f-order-class">' + classOptions + '</select>')
+      + field('Category*', '<select id="f-order-class">' + subcategoryOptionsHtml() + '</select>')
       + field('Notes', '<textarea id="f-order-notes" rows="3" placeholder="e.g. Ordering 10 more units — vendor lead time 2 weeks.">Manually requested order.</textarea>'),
       [
         { label:'Cancel', onClick:closeModal },
         { label:'Create order', cls:'btn-primary', onClick: async function(){
             try{
               await post('/api/procurement/alerts', {
-                hardware_class: document.getElementById('f-order-class').value,
+                category_id: document.getElementById('f-order-class').value,
                 notes: document.getElementById('f-order-notes').value.trim() || null,
               });
               toast('Order created.', 'ok');
@@ -1737,7 +2060,10 @@
       const specsCount = d.data.specsCount || 0;
       out.innerHTML = '<strong>' + esc(d.data.title || 'Untitled') + '</strong> — ' + specsCount + ' spec field(s) found.' +
         (d.data.image ? ' Image cached: <span class="mono">' + esc(d.data.image.filename) + '</span>' : ' No image cached.') +
-        (can('assets:write') ? '<div style="margin-top:8px;"><button class="btn btn-primary" id="scrape-add-btn">+ Add to inventory</button></div>' : '');
+        '<div style="margin-top:8px;display:flex;gap:8px;">' +
+          (can('catalog:write') ? '<button class="btn btn-primary" id="scrape-catalog-btn">+ Add to catalogue</button>' : '') +
+          (can('assets:write') ? '<button class="btn" id="scrape-add-btn">+ Add to inventory</button>' : '') +
+        '</div>';
       toast('Scrape complete.', 'ok');
       loadImages();
     }catch(err){
@@ -1752,47 +2078,37 @@
   // only reads specs off a public product page; it never writes to the
   // assets table itself, so nothing is added until the user reviews and
   // hits Create in the modal, same as any other new asset.
-  document.getElementById('scrape-result').addEventListener('click', function(e){
-    if (!e.target.closest('#scrape-add-btn') || !lastScrape) return;
+  document.getElementById('scrape-result').addEventListener('click', async function(e){
+    const toCatalog = e.target.closest('#scrape-catalog-btn');
+    const toInventory = e.target.closest('#scrape-add-btn');
+    if ((!toCatalog && !toInventory) || !lastScrape) return;
+
+    // Guess the vendor from the site's domain, but only use it if it's
+    // already in the vendor list (the form only accepts listed vendors).
     let vendorGuess = '';
     try{ vendorGuess = new URL(lastScrape.sourceUrl).hostname.replace(/^www\./,'').split('.')[0]; }catch(err){}
-    vendorGuess = vendorGuess ? vendorGuess.charAt(0).toUpperCase() + vendorGuess.slice(1) : '';
+    try{ await loadReference(true); }catch(err){}
+    const match = (refCache.vendors || []).find(function(v){ return v.is_active && v.name.toLowerCase() === vendorGuess.toLowerCase(); });
+
+    if (toCatalog){
+      openCatalogModal({
+        model: (lastScrape.title || '').slice(0, 200),
+        vendor: match ? match.name : '',
+        description: (lastScrape.description || '').slice(0, 1000),
+        specs: lastScrape.specs || {},
+        image_url: lastScrape.image ? lastScrape.image.url : null,
+        source_url: lastScrape.canonical || lastScrape.sourceUrl,
+      }, 'New catalogue model (from scrape)');
+      return;
+    }
     const specsLines = Object.entries(lastScrape.specs || {}).slice(0, 8)
       .map(function(kv){ return kv[0] + ': ' + kv[1]; }).join('\n');
-    const prefill = {
+    openNewAssetModal({
       model: (lastScrape.title || '').slice(0, 120),
-      vendor: vendorGuess,
+      vendor: match ? match.name : '',
       status: 'In-Hand',
       notes: [lastScrape.description, specsLines, 'Source: ' + lastScrape.canonical].filter(Boolean).join('\n\n').slice(0, 1000),
-    };
-    openModal('New asset (from scrape)', assetFormHtml(prefill), [
-      { label:'Cancel', onClick:closeModal },
-      { label:'Create', cls:'btn-primary', onClick: async function(){
-          const body = {
-            asset_tag: document.getElementById('f-asset_tag').value.trim(),
-            serial_number: document.getElementById('f-serial_number').value.trim(),
-            hardware_class: document.getElementById('f-hardware_class').value,
-            model: document.getElementById('f-model').value.trim(),
-            vendor: document.getElementById('f-vendor').value.trim() || null,
-            qr_code: document.getElementById('f-qr_code').value.trim() || null,
-            status: document.getElementById('f-status').value,
-            location: document.getElementById('f-location').value.trim() || null,
-            purchase_price: document.getElementById('f-purchase_price').value || null,
-            purchase_date: document.getElementById('f-purchase_date').value || null,
-            warranty_expiry: document.getElementById('f-warranty_expiry').value || null,
-            depreciation_years: document.getElementById('f-depreciation_years').value || null,
-            notes: document.getElementById('f-notes').value.trim() || null,
-          };
-          try{
-            await post('/api/assets', body);
-            toast('Asset registered from scraped page.', 'ok');
-            closeModal(); loadImages();
-          }catch(err){ toast(err.message, 'err'); }
-        } },
-    ]);
-    wireAssetTemplateSelect();
-    refreshModelSuggestions();
-    document.getElementById('f-hardware_class').addEventListener('change', refreshModelSuggestions);
+    }, 'New asset (from scrape)', loadImages);
   });
 
   document.getElementById('queue-status-btn').addEventListener('click', async function(){
@@ -1831,6 +2147,880 @@
       toast('Image deleted.', 'ok');
       loadImages();
     }catch(err){ toast(err.message, 'err'); }
+  });
+
+  /* =========================================================================
+     CATALOGUE
+     ========================================================================= */
+  let catalogPage = [];
+
+  async function loadCatalog(){
+    const tbl = document.getElementById('catalog-table');
+    setHead(tbl, ['','Model','Category','Part #','Std price','Warranty','Depr.','Devices','Status','Actions']);
+    const q = new URLSearchParams();
+    const s = document.getElementById('cat-search').value.trim();
+    const c = document.getElementById('cat-filter').value;
+    if (s) q.set('search', s);
+    if (c) q.set('category_id', c);
+    try{
+      const d = await get('/api/catalog?' + q.toString());
+      catalogPage = d.items || [];
+      setRows(tbl, catalogPage.map(function(ci){
+        const live = ci.is_active && ci.category_active;
+        const actions = ['<button class="btn" data-catalog-view="' + ci.id + '">Details</button>'];
+        if (can('assets:write') && live) actions.push('<button class="btn" data-catalog-newdev="' + ci.id + '">+ Device</button>');
+        if (can('catalog:write')){
+          actions.push('<button class="btn" data-catalog-edit="' + ci.id + '">Edit</button>');
+          actions.push('<button class="btn" data-catalog-toggle="' + ci.id + '">' + (ci.is_active ? 'Deactivate' : 'Activate') + '</button>');
+          if (!ci.asset_count) actions.push('<button class="btn btn-danger" data-catalog-delete="' + ci.id + '">Delete</button>');
+        }
+        return '<tr><td>' + (ci.image_url ? '<img class="thumb" alt="" src="' + esc(ci.image_url) + '">' : '') + '</td>' +
+          '<td><strong>' + esc(ci.model) + '</strong><div class="hint" style="margin:0;">' + esc(ci.vendor || 'No vendor') + '</div></td>' +
+          '<td>' + esc(catLabel(ci)) + '</td><td class="mono">' + esc(ci.part_number || '—') + '</td>' +
+          '<td class="num">' + (ci.standard_price != null ? fmtMoney(ci.standard_price) : '—') + '</td>' +
+          '<td>' + (ci.warranty_months != null ? esc(ci.warranty_months) + ' mo' : '—') + '</td>' +
+          '<td>' + (ci.depreciation_years != null ? esc(ci.depreciation_years) + ' yr' : '—') + '</td>' +
+          '<td class="mono">' + esc(ci.asset_count) + '</td>' +
+          '<td>' + badge(live ? 'Active' : 'Inactive') + '</td>' +
+          '<td><div class="row-actions">' + actions.join('') + '</div></td></tr>';
+      }), 10, 'No catalogue models match. Add one, or use the Scraper to pull one from a product page.');
+    }catch(err){
+      setRowsError(tbl, 10, 'Could not load catalogue — ' + err.message, loadCatalog);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.catalog = async function(){
+    const sel = document.getElementById('cat-filter');
+    try{
+      await loadCategoryTree(true);
+      sel.innerHTML = categoryFilterOptionsHtml(sel.value);
+    }catch(err){ /* filter stays at All */ }
+    loadCatalog();
+  };
+  document.getElementById('catalog-filter-btn').addEventListener('click', loadCatalog);
+  document.getElementById('cat-search').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadCatalog(); });
+  document.getElementById('catalog-new-btn').addEventListener('click', function(){ openCatalogModal(null); });
+
+  // specs <-> "Key: Value" lines in a textarea
+  function specsToText(specs){
+    return Object.entries(specs || {}).map(function(kv){ return kv[0] + ': ' + kv[1]; }).join('\n');
+  }
+  function textToSpecs(text){
+    const out = {};
+    String(text || '').split('\n').forEach(function(line){
+      const i = line.indexOf(':');
+      if (i > 0){
+        const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim();
+        if (k) out[k] = v;
+      }
+    });
+    return out;
+  }
+
+  // Create (ci without id, optionally prefilled) or edit (ci with id)
+  async function openCatalogModal(ci, title){
+    ci = ci || {};
+    let images = [];
+    try{
+      const [, , imgs] = await Promise.all([loadCategoryTree(true), loadReference(true), get('/api/hardware/images')]);
+      images = imgs.images || [];
+    }catch(err){ toast('Could not load form data — ' + err.message, 'err'); return; }
+    if (!subcategoryOptionsHtml(ci.category_id)){
+      toast('No active device subcategories yet. An Admin can add them under Types.', 'err');
+      return;
+    }
+    if (ci.image_url && !images.some(function(i){ return i.webUrl === ci.image_url; }))
+      images.unshift({ webUrl: ci.image_url, filename: ci.image_url.split('/').pop() });
+    const imgOpts = '<option value="">— No image —</option>' + images.map(function(i){
+      return '<option value="' + esc(i.webUrl) + '"' + (i.webUrl === ci.image_url ? ' selected' : '') + '>' + esc(i.filename) + '</option>';
+    }).join('');
+
+    openModal(title || (ci.id ? 'Edit model · ' + ci.model : 'New catalogue model'),
+      '<div class="grid-2">' +
+        field('Category*', '<select id="f-ci-category">' + subcategoryOptionsHtml(ci.category_id) + '</select>') +
+        field('Vendor', '<select id="f-ci-vendor">' + refOptionsHtml(refCache.vendors, ci.vendor) + '</select>') +
+        field('Model*', '<input id="f-ci-model" maxlength="200" value="' + esc(ci.model || '') + '">') +
+        field('Part number / SKU', '<input id="f-ci-part" value="' + esc(ci.part_number || '') + '">') +
+        field('Standard price', '<input id="f-ci-price" type="number" min="0" step="0.01" value="' + esc(ci.standard_price == null ? '' : ci.standard_price) + '">') +
+        field('Warranty (months)', '<input id="f-ci-warranty" type="number" min="0" max="240" step="1" value="' + esc(ci.warranty_months == null ? '' : ci.warranty_months) + '">') +
+        field('Depreciation (years)', '<input id="f-ci-dep" type="number" min="0" max="50" step="1" value="' + esc(ci.depreciation_years == null ? '' : ci.depreciation_years) + '">') +
+        field('Image (from Scraper cache)', '<select id="f-ci-image">' + imgOpts + '</select>') +
+      '</div>' +
+      field('Product page URL', '<input id="f-ci-source" placeholder="https://…" value="' + esc(ci.source_url || '') + '">') +
+      field('Description', '<textarea id="f-ci-desc" rows="2">' + esc(ci.description || '') + '</textarea>') +
+      field('Specifications — one "Name: Value" per line', '<textarea id="f-ci-specs" rows="6" placeholder="CPU: Intel Core Ultra 7&#10;RAM: 32 GB">' + esc(specsToText(ci.specs)) + '</textarea>'),
+      [
+        { label:'Cancel', onClick:closeModal },
+        { label: ci.id ? 'Save' : 'Create', cls:'btn-primary', onClick: async function(){
+            const body = {
+              category_id: document.getElementById('f-ci-category').value,
+              vendor: document.getElementById('f-ci-vendor').value || null,
+              model: document.getElementById('f-ci-model').value.trim(),
+              part_number: document.getElementById('f-ci-part').value.trim() || null,
+              standard_price: document.getElementById('f-ci-price').value,
+              warranty_months: document.getElementById('f-ci-warranty').value,
+              depreciation_years: document.getElementById('f-ci-dep').value,
+              image_url: document.getElementById('f-ci-image').value || null,
+              source_url: document.getElementById('f-ci-source').value.trim() || null,
+              description: document.getElementById('f-ci-desc').value.trim() || null,
+              specs: textToSpecs(document.getElementById('f-ci-specs').value),
+            };
+            if (!body.model){ toast('Model is required.', 'err'); return; }
+            try{
+              if (ci.id) await put('/api/catalog/' + ci.id, body);
+              else await post('/api/catalog', body);
+              toast('Catalogue model ' + (ci.id ? 'saved.' : 'added.'), 'ok');
+              closeModal();
+              catalogCache = null;
+              if (document.getElementById('view-catalog').classList.contains('active')) loadCatalog();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ], 'mid');
+  }
+
+  function openCatalogDetails(ci){
+    const specs = Object.entries(ci.specs || {});
+    openModal(ci.model,
+      '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">' +
+        (ci.image_url ? '<img alt="" src="' + esc(ci.image_url) + '" style="width:160px;max-height:160px;object-fit:contain;background:#fff;border-radius:6px;">' : '') +
+        '<dl class="kv" style="flex:1;min-width:220px;">' +
+          '<dt>Category</dt><dd>' + esc(catLabel(ci)) + '</dd>' +
+          '<dt>Vendor</dt><dd>' + esc(ci.vendor || '—') + '</dd>' +
+          '<dt>Part number</dt><dd class="mono">' + esc(ci.part_number || '—') + '</dd>' +
+          '<dt>Standard price</dt><dd>' + (ci.standard_price != null ? fmtMoney(ci.standard_price) : '—') + '</dd>' +
+          '<dt>Warranty</dt><dd>' + (ci.warranty_months != null ? esc(ci.warranty_months) + ' months' : '—') + '</dd>' +
+          '<dt>Depreciation</dt><dd>' + (ci.depreciation_years != null ? esc(ci.depreciation_years) + ' years' : '—') + '</dd>' +
+          '<dt>Devices</dt><dd>' + esc(ci.asset_count) + '</dd>' +
+          (ci.source_url ? '<dt>Product page</dt><dd><a class="link" href="' + esc(ci.source_url) + '" target="_blank" rel="noopener noreferrer">' + esc(ci.source_url) + '</a></dd>' : '') +
+        '</dl>' +
+      '</div>' +
+      (ci.description ? '<div class="section-title">Description</div><div>' + esc(ci.description) + '</div>' : '') +
+      (specs.length ? '<div class="section-title">Specifications</div><dl class="kv">' + specs.map(function(kv){
+        return '<dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd>';
+      }).join('') + '</dl>' : ''),
+      [{ label:'Close', cls:'btn-primary', onClick:closeModal }], 'mid');
+  }
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const t = e.target;
+    if (!t.getAttribute) return;
+    const find = function(attr){
+      const id = t.getAttribute(attr);
+      return id ? catalogPage.find(function(c){ return c.id === id; }) : null;
+    };
+    let ci;
+    if ((ci = find('data-catalog-view'))) return openCatalogDetails(ci);
+    if ((ci = find('data-catalog-edit'))) return openCatalogModal(ci);
+    if ((ci = find('data-catalog-newdev'))) return openNewAssetModal({ catalog_item_id: ci.id }, 'New ' + ci.model);
+    if ((ci = find('data-catalog-toggle'))){
+      try{
+        await put('/api/catalog/' + ci.id, { is_active: !ci.is_active });
+        toast(ci.model + (ci.is_active ? ' deactivated.' : ' activated.'), 'ok');
+        catalogCache = null; loadCatalog();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+    if ((ci = find('data-catalog-delete'))){
+      if (!confirm('Delete catalogue model "' + ci.model + '"? This cannot be undone.')) return;
+      try{
+        await del('/api/catalog/' + ci.id);
+        toast('Deleted.', 'ok');
+        catalogCache = null; loadCatalog();
+      }catch(err){ toast(err.message, 'err'); }
+    }
+  });
+
+  /* =========================================================================
+     REFERENCE DATA — vendors, departments/locations
+     ========================================================================= */
+  const REF = {
+    vendors: {
+      label: 'Vendor',
+      head: ['Name','Contact','Email','Phone','Website','In use','Status','Actions'],
+      cells: function(r){
+        return '<td><strong>' + esc(r.name) + '</strong>' + (r.address ? '<div class="hint" style="margin:0;">' + esc(r.address) + '</div>' : '') + '</td>' +
+          '<td>' + esc(r.contact_name || '—') + '</td><td>' + esc(r.email || '—') + '</td><td>' + esc(r.phone || '—') + '</td>' +
+          '<td>' + (r.website ? '<a class="link" href="' + esc(r.website) + '" target="_blank" rel="noopener noreferrer">' + esc(r.website.replace(/^https?:\/\//, '')) + '</a>' : '—') + '</td>';
+      },
+      form: function(r){
+        return '<div class="grid-2">' +
+          field('Name*', '<input id="f-ref-name" maxlength="200" value="' + esc(r.name || '') + '">') +
+          field('Contact person', '<input id="f-ref-contact_name" value="' + esc(r.contact_name || '') + '">') +
+          field('Email', '<input id="f-ref-email" type="email" value="' + esc(r.email || '') + '">') +
+          field('Phone', '<input id="f-ref-phone" value="' + esc(r.phone || '') + '">') +
+          '</div>' +
+          field('Website', '<input id="f-ref-website" placeholder="https://…" value="' + esc(r.website || '') + '">') +
+          field('Address', '<textarea id="f-ref-address" rows="2">' + esc(r.address || '') + '</textarea>') +
+          field('Notes', '<textarea id="f-ref-notes" rows="2">' + esc(r.notes || '') + '</textarea>');
+      },
+      fields: ['name','contact_name','email','phone','website','address','notes'],
+    },
+    locations: {
+      label: 'Department',
+      head: ['Name','Description','In use','Status','Actions'],
+      cells: function(r){ return '<td><strong>' + esc(r.name) + '</strong></td><td>' + esc(r.description || '—') + '</td>'; },
+      form: function(r){
+        return field('Name*', '<input id="f-ref-name" maxlength="200" value="' + esc(r.name || '') + '">') +
+          field('Description', '<textarea id="f-ref-description" rows="2">' + esc(r.description || '') + '</textarea>');
+      },
+      fields: ['name','description'],
+    },
+  };
+
+  function usageText(u){
+    return Object.entries(u || {}).filter(function(kv){ return kv[1] > 0; })
+      .map(function(kv){ return kv[1] + ' ' + kv[0].replace('_', ' '); }).join(', ') || '—';
+  }
+
+  async function loadReferenceView(){
+    try{
+      await loadReference(true);
+      ['vendors','locations'].forEach(function(table){
+        const cfg = REF[table];
+        const tbl = document.getElementById('ref-' + table);
+        setHead(tbl, cfg.head);
+        setRows(tbl, refCache[table].map(function(r){
+          const actions = can('reference:manage')
+            ? '<button class="btn" data-ref-edit="' + table + ':' + r.id + '">Edit</button>' +
+              '<button class="btn" data-ref-toggle="' + table + ':' + r.id + '">' + (r.is_active ? 'Deactivate' : 'Activate') + '</button>' +
+              (r.in_use ? '' : '<button class="btn btn-danger" data-ref-delete="' + table + ':' + r.id + '">Delete</button>')
+            : '';
+          return '<tr>' + cfg.cells(r) + '<td>' + esc(usageText(r.usage)) + '</td><td>' + badge(r.is_active ? 'Active' : 'Inactive') +
+            '</td><td><div class="row-actions">' + actions + '</div></td></tr>';
+        }), cfg.head.length, 'None yet.');
+      });
+    }catch(err){
+      toast('Could not load reference data — ' + err.message, 'err');
+    }
+  }
+  loaders.reference = loadReferenceView;
+
+  function openReferenceModal(table, r){
+    const cfg = REF[table];
+    r = r || {};
+    openModal((r.id ? 'Edit ' : 'New ') + cfg.label.toLowerCase() + (r.id ? ' · ' + r.name : ''), cfg.form(r), [
+      { label:'Cancel', onClick:closeModal },
+      { label: r.id ? 'Save' : 'Create', cls:'btn-primary', onClick: async function(){
+          const body = {};
+          cfg.fields.forEach(function(f){ body[f] = document.getElementById('f-ref-' + f).value.trim(); });
+          if (!body.name){ toast('Name is required.', 'err'); return; }
+          try{
+            if (r.id) await put('/api/reference/' + table + '/' + r.id, body);
+            else await post('/api/reference/' + table, body);
+            toast(cfg.label + ' ' + (r.id ? 'saved.' : 'added.'), 'ok');
+            closeModal(); loadReferenceView();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+  }
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const t = e.target;
+    if (!t.getAttribute) return;
+    const newTable = t.getAttribute('data-ref-new');
+    if (newTable){ openReferenceModal(newTable); return; }
+    const key = t.getAttribute('data-ref-edit') || t.getAttribute('data-ref-toggle') || t.getAttribute('data-ref-delete');
+    if (!key) return;
+    const parts = key.split(':');
+    const table = parts[0], r = (refCache[table] || []).find(function(x){ return x.id === parts[1]; });
+    if (!r) return;
+    if (t.hasAttribute('data-ref-edit')){ openReferenceModal(table, r); return; }
+    if (t.hasAttribute('data-ref-toggle')){
+      try{
+        await put('/api/reference/' + table + '/' + r.id, { is_active: !r.is_active });
+        toast('"' + r.name + '" ' + (r.is_active ? 'deactivated.' : 'activated.'), 'ok');
+        loadReferenceView();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+    if (!confirm('Delete "' + r.name + '"? This cannot be undone.')) return;
+    try{
+      await del('/api/reference/' + table + '/' + r.id);
+      toast('Deleted.', 'ok');
+      loadReferenceView();
+    }catch(err){ toast(err.message, 'err'); }
+  });
+
+  /* =========================================================================
+     RECEIPTS
+     ========================================================================= */
+  // ctx: { asset_id } or { invoice_id } when listed inside that record's
+  // modal (enables "Detach"); {} on the main receipts panel.
+  function receiptRowsHtml(list, ctx){
+    return list.map(function(r){
+      const links = r.assets.map(function(a){ return '<span class="mono">' + esc(a.asset_tag) + '</span>'; })
+        .concat(r.invoices.map(function(i){ return '<span class="mono">' + esc(i.invoice_number || 'Draft ' + i.invoice_type.toLowerCase()) + '</span>'; }));
+      const actions = [
+        '<a class="btn" href="/api/receipts/' + r.id + '/file?inline=1" target="_blank" rel="noopener">View</a>',
+        '<a class="btn" href="/api/receipts/' + r.id + '/file">Download</a>',
+      ];
+      if (can('assets:write')){
+        if (ctx.asset_id) actions.push('<button class="btn" data-rcpt-detach="' + r.id + '">Detach</button>');
+        else if (ctx.invoice_id && can('invoices:write') && ctx.draft) actions.push('<button class="btn" data-rcpt-detach="' + r.id + '">Detach</button>');
+        else if (!ctx.asset_id && !ctx.invoice_id) actions.push('<button class="btn" data-rcpt-attach="' + r.id + '">Attach…</button>');
+        actions.push('<button class="btn btn-danger" data-rcpt-delete="' + r.id + '">Delete</button>');
+      }
+      return '<tr><td>' + esc(r.original_name) + (r.description ? '<div class="hint" style="margin:0;">' + esc(r.description) + '</div>' : '') + '</td>' +
+        '<td class="mono">' + fmtBytes(r.size_bytes) + '</td>' +
+        '<td class="mono">' + fmtDateTime(r.created_at) + '<div class="hint" style="margin:0;">' + esc(r.uploaded_by_username || '') + '</div></td>' +
+        '<td>' + (links.join(', ') || '<span class="muted">Not attached</span>') + '</td>' +
+        '<td><div class="row-actions">' + actions.join('') + '</div></td></tr>';
+    });
+  }
+  const RECEIPT_HEAD = '<thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th>Attached to</th><th>Actions</th></tr></thead>';
+  const RECEIPT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp';
+
+  function receiptUploadFormHtml(extraHtml){
+    return '<div class="section-title">Upload</div>' +
+      '<div class="grid-2">' +
+        field('File(s)* — PDF, JPG, PNG or WebP, up to 10 MB each', '<input id="f-rcpt-files" type="file" multiple accept="' + RECEIPT_ACCEPT + '">') +
+        field('Description', '<input id="f-rcpt-desc" maxlength="500" placeholder="e.g. Dell order #4411, 3 monitors">') +
+      '</div>' + (extraHtml || '');
+  }
+
+  async function uploadFromForm(params){
+    const files = Array.from(document.getElementById('f-rcpt-files').files || []);
+    if (!files.length){ toast('Choose a file to upload.', 'err'); return false; }
+    const desc = document.getElementById('f-rcpt-desc').value.trim();
+    if (desc) params.description = desc;
+    let ok = 0;
+    for (const f of files){
+      try{
+        const d = await uploadReceipt(f, params);
+        ok++;
+        if (d.duplicate) toast(f.name + ' was already uploaded — linked the existing copy.', 'ok');
+      }catch(err){ toast(err.message, 'err'); }
+    }
+    if (ok) toast(ok + ' receipt(s) uploaded.', 'ok');
+    return ok > 0;
+  }
+
+  async function openAssetReceipts(a){
+    let list;
+    try{ list = (await get('/api/receipts?asset_id=' + a.id)).receipts; }
+    catch(err){ toast(err.message, 'err'); return; }
+    const others = lastAssetPage.filter(function(x){ return x.id !== a.id; });
+    const canWrite = can('assets:write');
+    openModal('Receipts · ' + a.asset_tag,
+      '<div class="tbl-wrap"><table>' + RECEIPT_HEAD + '<tbody>' +
+        (list.length ? receiptRowsHtml(list, { asset_id: a.id }).join('') : '<tr><td colspan="5" class="empty">No receipts for this device yet.</td></tr>') +
+      '</tbody></table></div>' +
+      (canWrite ? receiptUploadFormHtml(others.length
+        ? field('Also attach to (bought together)', '<select id="f-rcpt-others" multiple size="4">' + others.map(function(x){
+            return '<option value="' + x.id + '">' + esc(x.asset_tag) + ' — ' + esc(x.model) + '</option>'; }).join('') + '</select>' +
+            '<div class="hint">Ctrl/Cmd-click to pick several devices from the current Assets list.</div>')
+        : '') : ''),
+      [{ label:'Close', onClick:closeModal }].concat(canWrite ? [{ label:'Upload', cls:'btn-primary', onClick: async function(){
+          const sel = document.getElementById('f-rcpt-others');
+          const ids = [a.id].concat(sel ? Array.from(sel.selectedOptions).map(function(o){ return o.value; }) : []);
+          if (await uploadFromForm({ asset_ids: ids.join(',') })){ openAssetReceipts(a); loadAssets(); }
+        } }] : []), 'mid');
+    modalBody.onclick = async function(e){
+      const id = e.target.getAttribute && (e.target.getAttribute('data-rcpt-detach') || e.target.getAttribute('data-rcpt-delete'));
+      if (!id) return;
+      const isDelete = e.target.hasAttribute('data-rcpt-delete');
+      if (isDelete && !confirm('Delete this receipt everywhere it is attached? This cannot be undone.')) return;
+      try{
+        if (isDelete) await del('/api/receipts/' + id);
+        else await del('/api/receipts/' + id + '/links?asset_id=' + a.id);
+        toast(isDelete ? 'Receipt deleted.' : 'Receipt detached.', 'ok');
+        openAssetReceipts(a); loadAssets();
+      }catch(err){ toast(err.message, 'err'); }
+    };
+  }
+
+  async function loadReceiptsPanel(){
+    const tbl = document.getElementById('rcpt-table');
+    tbl.querySelector('thead').outerHTML = RECEIPT_HEAD;
+    try{
+      const unlinked = document.getElementById('rcpt-unlinked').checked;
+      const d = await get('/api/receipts' + (unlinked ? '?unlinked=1' : ''));
+      setRows(tbl, receiptRowsHtml(d.receipts, {}), 5, unlinked ? 'No unattached receipts.' : 'No receipts uploaded yet.');
+    }catch(err){
+      setRowsError(tbl, 5, 'Could not load receipts — ' + err.message, loadReceiptsPanel);
+    }
+  }
+  document.getElementById('rcpt-unlinked').addEventListener('change', loadReceiptsPanel);
+
+  document.getElementById('rcpt-upload-btn').addEventListener('click', function(){
+    openModal('Upload receipt', receiptUploadFormHtml('<div class="hint">Uploaded here, a receipt starts unattached — use Attach… to link it to devices or an invoice, or upload from a device\'s Receipts button instead.</div>'), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Upload', cls:'btn-primary', onClick: async function(){
+          if (await uploadFromForm({})){ closeModal(); loadReceiptsPanel(); }
+        } },
+    ], 'mid');
+  });
+
+  // Attach an existing receipt to a device or an invoice
+  async function openReceiptAttach(receiptId){
+    let assets = [], invoices = [];
+    try{
+      const reqs = [get('/api/assets?limit=500')];
+      if (can('invoices:write')) reqs.push(get('/api/invoices?limit=500'));
+      const res = await Promise.all(reqs);
+      assets = res[0].assets;
+      invoices = res[1] ? res[1].invoices.filter(function(i){ return i.status !== 'Void'; }) : [];
+    }catch(err){ toast(err.message, 'err'); return; }
+    openModal('Attach receipt',
+      field('Device', '<select id="f-att-asset"><option value="">—</option>' + assets.map(function(a){
+        return '<option value="' + a.id + '">' + esc(a.asset_tag) + ' — ' + esc(a.model) + '</option>'; }).join('') + '</select>') +
+      (can('invoices:write') ? field('…or invoice', '<select id="f-att-invoice"><option value="">—</option>' + invoices.map(function(i){
+        return '<option value="' + i.id + '">' + esc(i.invoice_number || 'Draft') + ' · ' + esc(i.invoice_type) + ' · ' + esc(i.party || '') + '</option>'; }).join('') + '</select>') : ''),
+      [
+        { label:'Cancel', onClick:closeModal },
+        { label:'Attach', cls:'btn-primary', onClick: async function(){
+            const asset_id = document.getElementById('f-att-asset').value;
+            const invSel = document.getElementById('f-att-invoice');
+            const invoice_id = invSel ? invSel.value : '';
+            if (!asset_id && !invoice_id){ toast('Pick a device or an invoice.', 'err'); return; }
+            try{
+              if (asset_id) await post('/api/receipts/' + receiptId + '/links', { asset_id: asset_id });
+              if (invoice_id) await post('/api/receipts/' + receiptId + '/links', { invoice_id: invoice_id });
+              toast('Receipt attached.', 'ok');
+              closeModal(); loadReceiptsPanel();
+            }catch(err){ toast(err.message, 'err'); }
+          } },
+      ]);
+  }
+
+  document.getElementById('rcpt-table').addEventListener('click', async function(e){
+    const t = e.target;
+    if (!t.getAttribute) return;
+    const attachId = t.getAttribute('data-rcpt-attach');
+    if (attachId){ openReceiptAttach(attachId); return; }
+    const delId = t.getAttribute('data-rcpt-delete');
+    if (delId){
+      if (!confirm('Delete this receipt everywhere it is attached? This cannot be undone.')) return;
+      try{ await del('/api/receipts/' + delId); toast('Receipt deleted.', 'ok'); loadReceiptsPanel(); }
+      catch(err){ toast(err.message, 'err'); }
+    }
+  });
+
+  /* =========================================================================
+     INVOICES
+     ========================================================================= */
+  function fmtCur(v, cur){
+    const n = Number(v || 0);
+    return esc(cur || '') + ' ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  const todayIso = function(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+
+  async function loadInvoices(){
+    const tbl = document.getElementById('inv-table');
+    setHead(tbl, ['Number','Type','Status','Date','Due','Billed to / Vendor','Total','Receipts','Actions']);
+    const q = new URLSearchParams();
+    const s = document.getElementById('inv-search').value.trim();
+    const ty = document.getElementById('inv-type').value;
+    const st = document.getElementById('inv-status').value;
+    if (s) q.set('search', s);
+    if (ty) q.set('type', ty);
+    if (st) q.set('status', st);
+    q.set('limit', 200);
+    try{
+      const d = await get('/api/invoices?' + q.toString());
+      setRows(tbl, d.invoices.map(function(i){
+        const overdue = i.status === 'Issued' && i.due_date && i.due_date < todayIso();
+        return '<tr><td class="mono">' + (i.invoice_number ? esc(i.invoice_number) : '<span class="muted">Draft</span>') + '</td>' +
+          '<td>' + esc(i.invoice_type) + '</td><td>' + badge(i.status) + (overdue ? ' <span class="badge badge-Void">Overdue</span>' : '') + '</td>' +
+          '<td class="mono">' + fmtDate(i.invoice_date) + '</td><td class="mono">' + fmtDate(i.due_date) + '</td>' +
+          '<td>' + esc(i.party || '—') + (i.vendor_invoice_number ? '<div class="hint" style="margin:0;">Ref ' + esc(i.vendor_invoice_number) + '</div>' : '') + '</td>' +
+          '<td class="num">' + fmtCur(i.total, i.currency) + '</td><td class="mono">' + esc(i.receipt_count) + '</td>' +
+          '<td><div class="row-actions"><button class="btn" data-inv-open="' + i.id + '">Open</button>' +
+            '<a class="btn" href="/api/invoices/' + i.id + '/pdf">PDF</a></div></td></tr>';
+      }), 9, 'No invoices match these filters.');
+    }catch(err){
+      setRowsError(tbl, 9, 'Could not load invoices — ' + err.message, loadInvoices);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.invoices = function(){ loadInvoices(); loadReceiptsPanel(); };
+  document.getElementById('inv-filter-btn').addEventListener('click', loadInvoices);
+  document.getElementById('inv-search').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadInvoices(); });
+  document.getElementById('inv-export-csv').addEventListener('click', function(){
+    const q = new URLSearchParams();
+    ['type','status'].forEach(function(k){ const v = document.getElementById('inv-' + k).value; if (v) q.set(k, v); });
+    download('/api/invoices/export.csv?' + q.toString());
+  });
+  document.getElementById('inv-new-cb').addEventListener('click', function(){ openInvoiceEditor('Chargeback', null); });
+  document.getElementById('inv-new-pur').addEventListener('click', function(){ openInvoiceEditor('Purchase', null); });
+  document.getElementById('inv-table').addEventListener('click', function(e){
+    const id = e.target.getAttribute && e.target.getAttribute('data-inv-open');
+    if (id) openInvoice(id);
+  });
+
+  async function openInvoice(id){
+    try{
+      const d = await get('/api/invoices/' + id);
+      if (d.invoice.status === 'Draft' && can('invoices:write')) openInvoiceEditor(d.invoice.invoice_type, d.invoice);
+      else openInvoiceView(d.invoice);
+    }catch(err){ toast(err.message, 'err'); }
+  }
+
+  // ---- Draft editor (new or existing draft) ----
+  async function openInvoiceEditor(type, inv){
+    inv = inv || { invoice_type: type, lines: [], tax_rate: 0, invoice_date: todayIso() };
+    let assets = [], employees = [];
+    try{
+      const res = await Promise.all([get('/api/assets?limit=500'), get('/api/employees?limit=500'), loadReference(true), loadCatalogItems(true)]);
+      assets = res[0].assets; employees = res[1].employees;
+    }catch(err){ toast('Could not load form data — ' + err.message, 'err'); return; }
+    const isPurchase = type === 'Purchase';
+
+    const assetOpts = function(sel){
+      return '<option value="">—</option>' + assets.map(function(a){
+        return '<option value="' + a.id + '"' + (a.id === sel ? ' selected' : '') + '>' + esc(a.asset_tag) + ' — ' + esc(a.model) + '</option>';
+      }).join('');
+    };
+    const catalogOpts = function(sel){
+      return '<option value="">—</option>' + (catalogCache || []).map(function(c){
+        return '<option value="' + c.id + '"' + (c.id === sel ? ' selected' : '') + '>' + esc([c.vendor, c.model].filter(Boolean).join(' ')) + '</option>';
+      }).join('');
+    };
+    const lineRow = function(l){
+      l = l || {};
+      return '<tr data-line>' +
+        '<td><select data-l="asset_id">' + assetOpts(l.asset_id) + '</select></td>' +
+        '<td><select data-l="catalog_item_id">' + catalogOpts(l.catalog_item_id) + '</select></td>' +
+        '<td><input data-l="description" maxlength="500" value="' + esc(l.description || '') + '" placeholder="Filled from device / model if blank"></td>' +
+        '<td style="width:70px;"><input data-l="quantity" type="number" min="0.01" step="0.01" value="' + esc(l.quantity == null ? 1 : Number(l.quantity)) + '"></td>' +
+        '<td style="width:110px;"><input data-l="unit_price" type="number" min="0" step="0.01" value="' + esc(l.unit_price == null ? '' : Number(l.unit_price)) + '"></td>' +
+        '<td class="num" data-l-total style="width:110px;padding-top:9px;">—</td>' +
+        '<td style="width:36px;"><button class="btn" data-l-remove title="Remove line">&times;</button></td></tr>';
+    };
+
+    const partyFields = isPurchase
+      ? field('Vendor*', '<select id="f-inv-vendor">' + refOptionsHtml(refCache.vendors, inv.vendor, '— Select vendor —') + '</select>') +
+        field("Vendor's invoice number", '<input id="f-inv-vendor_invoice_number" value="' + esc(inv.vendor_invoice_number || '') + '">')
+      : field('Employee', '<select id="f-inv-employee_id"><option value="">—</option>' + employees.map(function(e){
+          return '<option value="' + e.id + '"' + (e.id === inv.employee_id ? ' selected' : '') + '>' + esc(e.full_name) + ' (' + esc(e.employee_code) + ')</option>';
+        }).join('') + '</select>') +
+        field('Department', '<select id="f-inv-department">' + refOptionsHtml(refCache.locations, inv.department) + '</select>');
+
+    openModal((inv.id ? 'Draft ' : 'New ') + (isPurchase ? 'purchase invoice' : 'chargeback invoice'),
+      '<div class="grid-2">' + partyFields +
+        field('Invoice date*', '<input id="f-inv-invoice_date" type="date" value="' + esc(inv.invoice_date || todayIso()) + '">') +
+        field('Due date', '<input id="f-inv-due_date" type="date" value="' + esc(inv.due_date || '') + '">') +
+        field('Currency', '<input id="f-inv-currency" maxlength="3" placeholder="Default" value="' + esc(inv.currency || '') + '" style="text-transform:uppercase;">') +
+        field('Tax rate (%)', '<input id="f-inv-tax_rate" type="number" min="0" max="100" step="0.01" value="' + esc(Number(inv.tax_rate || 0)) + '">') +
+      '</div>' +
+      (isPurchase ? '' : '<div class="hint" style="margin:-6px 0 10px;">Bill an employee, a department, or both.</div>') +
+      '<div class="section-title">Lines</div>' +
+      '<div class="tbl-wrap"><table class="lines-tbl"><thead><tr><th>Device</th><th>Catalogue model</th><th>Description</th><th>Qty</th><th>Unit price</th><th class="num">Amount</th><th></th></tr></thead>' +
+        '<tbody id="inv-lines">' + (inv.lines.length ? inv.lines.map(lineRow).join('') : lineRow()) + '</tbody></table></div>' +
+      '<button class="btn" id="inv-add-line" style="margin-top:8px;">+ Add line</button>' +
+      '<div class="totals"><span>Subtotal</span><span class="num" id="inv-sub">—</span>' +
+        '<span>Tax</span><span class="num" id="inv-tax">—</span>' +
+        '<span class="t">Total</span><span class="num t" id="inv-total">—</span></div>' +
+      field('Notes (printed on the invoice)', '<textarea id="f-inv-notes" rows="2" maxlength="2000">' + esc(inv.notes || '') + '</textarea>') +
+      '<div class="hint">The invoice number is assigned when you issue it. Issued invoices can no longer be edited — only marked paid or voided.</div>',
+      [{ label:'Cancel', onClick:closeModal }]
+        .concat(inv.id ? [{ label:'Delete draft', cls:'btn-danger', onClick: async function(){
+          if (!confirm('Delete this draft invoice?')) return;
+          try{ await del('/api/invoices/' + inv.id); toast('Draft deleted.', 'ok'); closeModal(); loadInvoices(); }
+          catch(err){ toast(err.message, 'err'); }
+        } }] : [])
+        .concat(inv.id ? [{ label:'Download draft PDF', onClick: function(){ download('/api/invoices/' + inv.id + '/pdf'); } }] : [])
+        .concat([
+          { label:'Save draft', onClick: function(){ save(false); } },
+          { label:'Save & issue', cls:'btn-primary', onClick: function(){ save(true); } },
+        ]),
+      'wide');
+
+    const tbody = document.getElementById('inv-lines');
+    function recalc(){
+      let sub = 0;
+      tbody.querySelectorAll('tr[data-line]').forEach(function(tr){
+        const q = parseFloat(tr.querySelector('[data-l="quantity"]').value) || 0;
+        const p = parseFloat(tr.querySelector('[data-l="unit_price"]').value);
+        const amt = isNaN(p) ? null : Math.round(q * p * 100) / 100;
+        tr.querySelector('[data-l-total]').textContent = amt == null ? '—' : amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (amt != null) sub += amt;
+      });
+      const rate = parseFloat(document.getElementById('f-inv-tax_rate').value) || 0;
+      const tax = Math.round(sub * rate) / 100;
+      const cur = (document.getElementById('f-inv-currency').value || inv.currency || '').toUpperCase();
+      document.getElementById('inv-sub').textContent = fmtCur(sub, cur);
+      document.getElementById('inv-tax').textContent = fmtCur(tax, cur);
+      document.getElementById('inv-total').textContent = fmtCur(sub + tax, cur);
+    }
+    modalBody.oninput = recalc;
+    modalBody.onchange = function(e){
+      const t = e.target;
+      const tr = t.closest && t.closest('tr[data-line]');
+      if (!tr) return recalc();
+      const desc = tr.querySelector('[data-l="description"]'), price = tr.querySelector('[data-l="unit_price"]');
+      if (t.getAttribute('data-l') === 'asset_id' && t.value){
+        const a = assets.find(function(x){ return x.id === t.value; });
+        if (a){
+          desc.value = a.subcategory + ' — ' + [a.vendor, a.model].filter(Boolean).join(' ') + ' (Tag ' + a.asset_tag + ', S/N ' + a.serial_number + ')';
+          if (price.value === '' && a.purchase_price != null) price.value = Number(a.purchase_price);
+          if (a.catalog_item_id) tr.querySelector('[data-l="catalog_item_id"]').value = a.catalog_item_id;
+        }
+      }
+      if (t.getAttribute('data-l') === 'catalog_item_id' && t.value){
+        const c = (catalogCache || []).find(function(x){ return x.id === t.value; });
+        if (c){
+          if (!desc.value) desc.value = [c.vendor, c.model].filter(Boolean).join(' ');
+          if (price.value === '' && c.standard_price != null) price.value = Number(c.standard_price);
+        }
+      }
+      recalc();
+    };
+    modalBody.onclick = function(e){
+      if (e.target.id === 'inv-add-line'){ tbody.insertAdjacentHTML('beforeend', lineRow()); recalc(); return; }
+      if (e.target.hasAttribute && e.target.hasAttribute('data-l-remove')){ e.target.closest('tr').remove(); recalc(); }
+    };
+    recalc();
+
+    async function save(issue){
+      const val = function(id){ const el = document.getElementById('f-inv-' + id); return el ? el.value.trim() : undefined; };
+      const body = {
+        invoice_date: val('invoice_date'),
+        due_date: val('due_date') || null,
+        tax_rate: val('tax_rate') || 0,
+        notes: val('notes') || null,
+        lines: Array.from(tbody.querySelectorAll('tr[data-line]')).map(function(tr){
+          const g = function(k){ return tr.querySelector('[data-l="' + k + '"]').value.trim(); };
+          return { asset_id: g('asset_id') || null, catalog_item_id: g('catalog_item_id') || null,
+                   description: g('description'), quantity: g('quantity'), unit_price: g('unit_price') };
+        }).filter(function(l){ return l.asset_id || l.catalog_item_id || l.description || l.unit_price; }),
+      };
+      const cur = val('currency');
+      if (cur) body.currency = cur.toUpperCase();
+      if (isPurchase){ body.vendor = val('vendor') || null; body.vendor_invoice_number = val('vendor_invoice_number') || null; }
+      else { body.employee_id = val('employee_id') || null; body.department = val('department') || null; }
+      if (!inv.id) body.invoice_type = type;
+      if (issue && !body.lines.length){ toast('Add at least one line before issuing.', 'err'); return; }
+      if (issue && !confirm('Issue this invoice? It gets its number now and can no longer be edited.')) return;
+      try{
+        const saved = inv.id ? await put('/api/invoices/' + inv.id, body) : await post('/api/invoices', body);
+        if (issue){
+          const issued = await post('/api/invoices/' + saved.invoice.id + '/issue');
+          toast('Issued ' + issued.invoice.invoice_number + '.', 'ok');
+          loadInvoices();
+          openInvoiceView(issued.invoice);
+        } else {
+          toast('Draft saved.', 'ok');
+          inv = saved.invoice;
+          loadInvoices();
+          closeModal();
+        }
+      }catch(err){ toast(err.message, 'err'); }
+    }
+  }
+
+  // ---- Read-only view (issued / paid / void, or any invoice for viewers) ----
+  async function openInvoiceView(inv){
+    let receipts = [];
+    try{ receipts = (await get('/api/receipts?invoice_id=' + inv.id)).receipts; }catch(err){ /* shown empty */ }
+    const cur = inv.currency;
+    const party = inv.invoice_type === 'Purchase'
+      ? '<dt>Vendor</dt><dd>' + esc(inv.vendor) + '</dd>' + (inv.vendor_invoice_number ? '<dt>Vendor invoice #</dt><dd class="mono">' + esc(inv.vendor_invoice_number) + '</dd>' : '')
+      : (inv.employee_name ? '<dt>Employee</dt><dd>' + esc(inv.employee_name) + ' (' + esc(inv.employee_code) + ')</dd>' : '') +
+        (inv.department ? '<dt>Department</dt><dd>' + esc(inv.department) + '</dd>' : '');
+    const canUpload = can('assets:write') && can('invoices:write') && inv.status !== 'Void';
+    openModal((inv.invoice_number || 'Draft') + ' · ' + inv.invoice_type,
+      '<div class="grid-2"><dl class="kv">' +
+          '<dt>Status</dt><dd>' + badge(inv.status) + '</dd>' +
+          '<dt>Invoice date</dt><dd>' + fmtDate(inv.invoice_date) + '</dd>' +
+          '<dt>Due date</dt><dd>' + fmtDate(inv.due_date) + '</dd>' + party +
+        '</dl><dl class="kv">' +
+          (inv.issued_at ? '<dt>Issued</dt><dd>' + fmtDateTime(inv.issued_at) + ' · ' + esc(inv.issued_by_username || '') + '</dd>' : '') +
+          (inv.paid_at ? '<dt>Paid</dt><dd>' + fmtDateTime(inv.paid_at) + ' · ' + esc(inv.paid_by_username || '') + (inv.payment_reference ? '<br><span class="mono">' + esc(inv.payment_reference) + '</span>' : '') + '</dd>' : '') +
+          (inv.voided_at ? '<dt>Voided</dt><dd>' + fmtDateTime(inv.voided_at) + ' · ' + esc(inv.voided_by_username || '') + '<br>' + esc(inv.void_reason || '') + '</dd>' : '') +
+          '<dt>Created by</dt><dd>' + esc(inv.created_by_username || '—') + '</dd>' +
+        '</dl></div>' +
+      '<div class="section-title">Lines</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Description</th><th>Asset</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>' +
+        (inv.lines.map(function(l){
+          return '<tr><td>' + l.line_no + '</td><td>' + esc(l.description) + '</td><td class="mono">' + esc(l.asset_tag || '') + '</td>' +
+            '<td class="num">' + esc(Number(l.quantity)) + '</td><td class="num">' + fmtCur(l.unit_price, cur) + '</td><td class="num">' + fmtCur(l.line_total, cur) + '</td></tr>';
+        }).join('') || '<tr><td colspan="6" class="empty">No lines.</td></tr>') +
+      '</tbody></table></div>' +
+      '<div class="totals"><span>Subtotal</span><span class="num">' + fmtCur(inv.subtotal, cur) + '</span>' +
+        '<span>Tax (' + esc(Number(inv.tax_rate)) + '%)</span><span class="num">' + fmtCur(inv.tax_amount, cur) + '</span>' +
+        '<span class="t">Total</span><span class="num t">' + fmtCur(inv.total, cur) + '</span></div>' +
+      (inv.notes ? '<div class="section-title">Notes</div><div>' + esc(inv.notes) + '</div>' : '') +
+      '<div class="section-title">Receipts &amp; proof of payment</div>' +
+      '<div class="tbl-wrap"><table>' + RECEIPT_HEAD + '<tbody>' +
+        (receipts.length ? receiptRowsHtml(receipts, { invoice_id: inv.id, draft: inv.status === 'Draft' }).join('') : '<tr><td colspan="5" class="empty">No receipts attached.</td></tr>') +
+      '</tbody></table></div>' +
+      (canUpload ? receiptUploadFormHtml() : ''),
+      [{ label:'Close', onClick:closeModal }]
+        .concat(canUpload ? [{ label:'Upload receipt', onClick: async function(){
+          if (await uploadFromForm({ invoice_id: inv.id })){ loadInvoices(); loadReceiptsPanel(); openInvoice(inv.id); }
+        } }] : [])
+        .concat(inv.status === 'Issued' && can('invoices:write') ? [{ label:'Mark paid', onClick: async function(){
+          const ref = prompt('Payment reference (optional) — e.g. payroll run, transfer ID:', '');
+          if (ref === null) return;
+          try{ const d = await post('/api/invoices/' + inv.id + '/pay', { payment_reference: ref }); toast(inv.invoice_number + ' marked paid.', 'ok'); loadInvoices(); openInvoiceView(d.invoice); }
+          catch(err){ toast(err.message, 'err'); }
+        } }] : [])
+        .concat((inv.status === 'Issued' || inv.status === 'Paid') && can('invoices:void') ? [{ label:'Void', cls:'btn-danger', onClick: async function(){
+          const reason = prompt('Reason for voiding ' + inv.invoice_number + ' (required):', '');
+          if (!reason) return;
+          try{ const d = await post('/api/invoices/' + inv.id + '/void', { reason: reason }); toast(inv.invoice_number + ' voided.', 'ok'); loadInvoices(); openInvoiceView(d.invoice); }
+          catch(err){ toast(err.message, 'err'); }
+        } }] : [])
+        .concat([{ label:'Download PDF', cls:'btn-primary', onClick: function(){ download('/api/invoices/' + inv.id + '/pdf'); } }]),
+      'wide');
+    modalBody.onclick = async function(e){
+      const id = e.target.getAttribute && (e.target.getAttribute('data-rcpt-detach') || e.target.getAttribute('data-rcpt-delete'));
+      if (!id) return;
+      const isDelete = e.target.hasAttribute('data-rcpt-delete');
+      if (isDelete && !confirm('Delete this receipt everywhere it is attached? This cannot be undone.')) return;
+      try{
+        if (isDelete) await del('/api/receipts/' + id);
+        else await del('/api/receipts/' + id + '/links?invoice_id=' + inv.id);
+        toast(isDelete ? 'Receipt deleted.' : 'Receipt detached.', 'ok');
+        loadInvoices(); loadReceiptsPanel(); openInvoice(inv.id);
+      }catch(err){ toast(err.message, 'err'); }
+    };
+  }
+
+  /* =========================================================================
+     DEVICE CATEGORIES (Admin only)
+     ========================================================================= */
+  async function loadCategories(){
+    const tbl = document.getElementById('cat-table');
+    setHead(tbl, ['Name','Description','Devices','Order','Status','Actions']);
+    try{
+      const tree = await loadCategoryTree(true);
+      const rows = [];
+      tree.forEach(function(cat){
+        rows.push(categoryRowHtml(cat, null));
+        cat.subcategories.forEach(function(s){ rows.push(categoryRowHtml(s, cat)); });
+      });
+      setRows(tbl, rows, 6, 'No categories yet. Create one to start filing devices.');
+    }catch(err){
+      setRowsError(tbl, 6, 'Could not load categories — ' + err.message, loadCategories);
+      toast(err.message, 'err');
+    }
+  }
+  loaders.categories = loadCategories;
+
+  function categoryRowHtml(c, parent){
+    const isSub = !!parent;
+    const actions = ['<button class="btn" data-cat-edit="' + c.id + '">Edit</button>'];
+    if (!isSub) actions.push('<button class="btn" data-cat-addsub="' + c.id + '">+ Subcategory</button>');
+    actions.push('<button class="btn" data-cat-toggle="' + c.id + '">' + (c.is_active ? 'Deactivate' : 'Activate') + '</button>');
+    actions.push('<button class="btn btn-danger" data-cat-delete="' + c.id + '">Delete</button>');
+    const name = isSub
+      ? '<span style="color:var(--muted);padding-left:18px;">└&nbsp;</span>' + esc(c.name)
+      : '<strong>' + esc(c.name) + '</strong> <span class="hint">(' + c.subcategories.length + ' sub)</span>';
+    // A subcategory hidden by its parent's deactivation shows as inactive too.
+    const effectiveActive = c.is_active && (!parent || parent.is_active);
+    return '<tr><td>' + name + '</td><td>' + esc(c.description || '—') + '</td><td class="mono">' + esc(c.asset_count) +
+      '</td><td class="mono">' + esc(c.sort_order) + '</td><td>' + badge(effectiveActive ? 'Active' : 'Inactive') +
+      '</td><td><div class="row-actions">' + actions.join('') + '</div></td></tr>';
+  }
+
+  function findCategory(id){
+    for (const cat of (categoryTree || [])){
+      if (cat.id === id) return { row: cat, parent: null };
+      for (const s of cat.subcategories) if (s.id === id) return { row: s, parent: cat };
+    }
+    return null;
+  }
+
+  // One form for create + edit, top-level + sub. parentId set → subcategory.
+  function categoryFormHtml(c, parentId){
+    c = c || {};
+    const parentPicker = parentId
+      ? field('Category*', '<select id="f-cat-parent">' + (categoryTree || []).map(function(p){
+          return '<option value="' + p.id + '"' + (p.id === parentId ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+        }).join('') + '</select>')
+      : '';
+    return parentPicker + '<div class="grid-2">' +
+      field('Name*', '<input id="f-cat-name" maxlength="100" value="' + esc(c.name || '') + '">') +
+      field('Sort order', '<input id="f-cat-sort" type="number" step="1" value="' + esc(c.sort_order == null ? 0 : c.sort_order) + '">') +
+      '</div>' + field('Description', '<textarea id="f-cat-desc" rows="2">' + esc(c.description || '') + '</textarea>') +
+      '<div class="hint">Lower sort order is listed first.</div>';
+  }
+
+  function readCategoryForm(){
+    const body = {
+      name: document.getElementById('f-cat-name').value.trim(),
+      description: document.getElementById('f-cat-desc').value.trim() || null,
+      sort_order: document.getElementById('f-cat-sort').value || 0,
+    };
+    const parentSel = document.getElementById('f-cat-parent');
+    if (parentSel) body.parent_id = parentSel.value;
+    return body;
+  }
+
+  function openCategoryCreate(parentId){
+    const parent = parentId ? findCategory(parentId) : null;
+    openModal(parent ? 'New subcategory in ' + parent.row.name : 'New category', categoryFormHtml(null, parentId), [
+      { label:'Cancel', onClick:closeModal },
+      { label:'Create', cls:'btn-primary', onClick: async function(){
+          const body = readCategoryForm();
+          if (!body.name){ toast('Name is required.', 'err'); return; }
+          try{
+            await post('/api/categories', body);
+            toast((parent ? 'Subcategory' : 'Category') + ' "' + body.name + '" created.', 'ok');
+            closeModal(); loadCategories();
+          }catch(err){ toast(err.message, 'err'); }
+        } },
+    ]);
+  }
+
+  document.getElementById('cat-new-btn').addEventListener('click', function(){ openCategoryCreate(null); });
+
+  document.getElementById('content').addEventListener('click', async function(e){
+    const t = e.target;
+    if (!t.getAttribute) return;
+    const addSubId = t.getAttribute('data-cat-addsub');
+    const editId   = t.getAttribute('data-cat-edit');
+    const toggleId = t.getAttribute('data-cat-toggle');
+    const deleteId = t.getAttribute('data-cat-delete');
+
+    if (addSubId){ openCategoryCreate(addSubId); return; }
+
+    if (editId){
+      const found = findCategory(editId);
+      if (!found) return;
+      openModal('Edit ' + (found.parent ? 'subcategory' : 'category') + ' · ' + found.row.name,
+        categoryFormHtml(found.row, found.parent && found.parent.id), [
+          { label:'Cancel', onClick:closeModal },
+          { label:'Save', cls:'btn-primary', onClick: async function(){
+              const body = readCategoryForm();
+              if (!body.name){ toast('Name is required.', 'err'); return; }
+              try{
+                await put('/api/categories/' + editId, body);
+                toast('Saved.', 'ok');
+                closeModal(); loadCategories();
+              }catch(err){ toast(err.message, 'err'); }
+            } },
+        ]);
+      return;
+    }
+
+    if (toggleId){
+      const found = findCategory(toggleId);
+      if (!found) return;
+      try{
+        await put('/api/categories/' + toggleId, { is_active: !found.row.is_active });
+        toast('"' + found.row.name + '" ' + (found.row.is_active ? 'deactivated.' : 'activated.'), 'ok');
+        loadCategories();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+
+    if (deleteId){
+      const found = findCategory(deleteId);
+      if (!found) return;
+      if (!confirm('Delete "' + found.row.name + '"? This cannot be undone.' +
+        (found.parent ? ' Its procurement threshold and alert history are deleted with it.' : ''))) return;
+      try{
+        await del('/api/categories/' + deleteId);
+        toast('"' + found.row.name + '" deleted.', 'ok');
+        loadCategories();
+      }catch(err){ toast(err.message, 'err'); }
+    }
   });
 
   /* =========================================================================

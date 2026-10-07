@@ -230,6 +230,21 @@ if ($migrationPresent -eq 't') {
   Write-Ok "migration-001.sql applied"
 }
 
+# Later migrations, each detected by an object it creates
+foreach ($m in @(
+    @{ File = 'migration-002.sql'; Marker = 'procurement_thresholds' },
+    @{ File = 'migration-003.sql'; Marker = 'device_categories' },
+    @{ File = 'migration-004.sql'; Marker = 'vendors' }
+)) {
+  $present = Get-SqlScalar -Database $DbName -Sql "SELECT to_regclass('public.$($m.Marker)') IS NOT NULL;"
+  if ($present -eq 't') {
+    Write-Info "$($m.File) already applied (skipping)"
+  } else {
+    Invoke-SqlFile -Database $DbName -File (Join-Path $PSScriptRoot $m.File)
+    Write-Ok "$($m.File) applied"
+  }
+}
+
 # Grant privileges on everything the schema created (and for future objects).
 $grantSql = @"
 GRANT USAGE ON SCHEMA public TO $DbUser;

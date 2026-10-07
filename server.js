@@ -17,11 +17,18 @@ const https         = require('https');
 const http          = require('http');
 const fs            = require('fs');
 const path          = require('path');
-const { Pool }      = require('pg');
+const { Pool, types } = require('pg');
+
+// Return DATE columns as plain 'YYYY-MM-DD' strings. By default pg turns
+// them into JS Dates at *local* midnight, which serialise to the previous
+// day in UTC on any server east of Greenwich — and the edit forms then
+// saved that shifted day back.
+types.setTypeParser(1082, (v) => v);
 const bcrypt        = require('bcryptjs');
 const session       = require('express-session');
 const connectPg     = require('connect-pg-simple');
 const express       = require('express');
+const { sanitizeStr, sanitizeObj, isUUID, isEmail, isDate, parseNumber, makeDb } = require('./lib/helpers');
 
 // =============================================================================
 // ENVIRONMENT VALIDATION
@@ -87,15 +94,10 @@ pool.on('error', (err) => {
     console.error('[DB POOL] Unexpected client error:', err.message);
 });
 
-// Helper: run a parameterised query
-async function query(sql, params) {
-    const client = await pool.connect();
-    try {
-        return await client.query(sql, params);
-    } finally {
-        client.release();
-    }
-}
+// query / withTransaction / checkSubcategory / checkReference — shared with
+// the route modules via `db`
+const db = makeDb(pool);
+const { query, withTransaction, checkSubcategory, checkReference } = db;
 
 // =============================================================================
 // EXPRESS APPLICATION
@@ -184,9 +186,11 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000).unref();
 
-function makeRateLimiter(maxHits, windowMs) {
+function makeRateLimiter(name, maxHits, windowMs) {
     return function rateLimitMiddleware(req, res, next) {
-        const key  = req.ip || 'unknown';
+        // Each limiter keeps its own count — sharing one per-IP list meant
+        // every ordinary API call counted toward the 10-login limit.
+        const key  = name + ':' + (req.ip || 'unknown');
         const now  = Date.now();
         const hits = (_rlStore.get(key) || []).filter(t => now - t < windowMs);
         hits.push(now);
@@ -202,9 +206,9 @@ function makeRateLimiter(maxHits, windowMs) {
 }
 
 // General API: 300 requests per 15 minutes per IP
-const apiLimiter  = makeRateLimiter(300, 15 * 60 * 1000);
+const apiLimiter  = makeRateLimiter('api', 300, 15 * 60 * 1000);
 // Auth endpoints: 10 attempts per 15 minutes per IP (brute-force protection)
-const authLimiter = makeRateLimiter(10,  15 * 60 * 1000);
+const authLimiter = makeRateLimiter('auth', 10, 15 * 60 * 1000);
 
 // =============================================================================
 // SESSION MANAGEMENT
@@ -234,34 +238,6 @@ app.use(session({
 }));
 
 // =============================================================================
-// INPUT HELPERS
-// =============================================================================
-
-function sanitizeStr(v) {
-    if (v == null) return null;
-    return String(v).trim().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-}
-
-function sanitizeObj(obj, allowed) {
-    if (!obj || typeof obj !== 'object') return {};
-    const out = {};
-    for (const k of allowed) {
-        if (Object.prototype.hasOwnProperty.call(obj, k)) {
-            out[k] = typeof obj[k] === 'string' ? sanitizeStr(obj[k]) : obj[k];
-        }
-    }
-    return out;
-}
-
-function isUUID(v) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-}
-
-function isEmail(v) {
-    return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
-}
-
-// =============================================================================
 // RBAC
 // =============================================================================
 
@@ -278,6 +254,12 @@ const PERMS = {
     'procurement:write': ['Admin', 'TAC'],
     'audits:read':       ['Admin', 'TAC', 'Viewer'],
     'audits:write':      ['Admin', 'TAC'],
+    'categories:manage': ['Admin'],
+    'reference:manage':  ['Admin', 'TAC'],
+    'catalog:write':     ['Admin', 'TAC'],
+    'invoices:read':     ['Admin', 'TAC', 'Viewer'],
+    'invoices:write':    ['Admin', 'TAC'],
+    'invoices:void':     ['Admin'],
     'users:manage':      ['Admin'],
 };
 
@@ -454,18 +436,20 @@ app.get('/api/dashboard/summary', can('dashboard:read'), async (req, res) => {
                    FROM assets`, []),
             query(`SELECT COUNT(*) AS open_alerts FROM procurement_alerts WHERE resolved_at IS NULL`, []),
             query(`SELECT ah.event_type, ah.created_at, ah.notes,
-                          a.asset_tag, a.hardware_class,
+                          a.asset_tag, cp.category, cp.subcategory,
                           e.full_name   AS employee_name,
                           u.username    AS performed_by
                    FROM asset_history ah
                    LEFT JOIN assets    a ON a.id = ah.asset_id
+                   LEFT JOIN device_category_paths cp ON cp.id = a.category_id
                    LEFT JOIN employees e ON e.id = ah.employee_id
                    LEFT JOIN users     u ON u.id = ah.performed_by
                    ORDER BY ah.created_at DESC LIMIT 15`, []),
-            query(`SELECT id, asset_tag, hardware_class, model, warranty_expiry
-                   FROM assets
-                   WHERE warranty_expiry BETWEEN NOW() AND NOW() + INTERVAL '90 days'
-                   ORDER BY warranty_expiry ASC LIMIT 10`, []),
+            query(`SELECT a.id, a.asset_tag, cp.category, cp.subcategory, a.model, a.warranty_expiry
+                   FROM assets a
+                   JOIN device_category_paths cp ON cp.id = a.category_id
+                   WHERE a.warranty_expiry BETWEEN NOW() AND NOW() + INTERVAL '90 days'
+                   ORDER BY a.warranty_expiry ASC LIMIT 10`, []),
         ]);
 
         return res.json({
@@ -554,6 +538,9 @@ app.post('/api/employees', can('employees:write'), async (req, res) => {
         return res.status(400).json({ error: 'Invalid status value.' });
 
     try {
+        const refErr = await checkReference('locations', b, 'department', 'Department');
+        if (refErr) return res.status(400).json({ error: refErr });
+
         const { rows } = await query(
             `INSERT INTO employees
              (employee_code,full_name,email,phone,department,designation,
@@ -582,6 +569,7 @@ app.put('/api/employees/:id', can('employees:write'), async (req, res) => {
     const ALLOWED = ['full_name','email','phone','department','designation',
                      'reporting_manager','status','join_date','offboard_date','notes'];
     const b = sanitizeObj(req.body, ALLOWED);
+    if (b.department === '') b.department = null;
 
     if (b.email && !isEmail(b.email))
         return res.status(400).json({ error: 'Invalid email address.' });
@@ -602,15 +590,21 @@ app.put('/api/employees/:id', can('employees:write'), async (req, res) => {
             });
     }
 
-    const sets   = [];
-    const params = [];
-    for (const [k, v] of Object.entries(b)) {
-        if (v !== undefined) { params.push(v); sets.push(`${k}=$${params.length}`); }
-    }
-    if (!sets.length) return res.status(400).json({ error: 'No fields to update.' });
-    params.push(id);
+    if (!Object.keys(b).length) return res.status(400).json({ error: 'No fields to update.' });
 
     try {
+        if (b.department !== undefined) {
+            const refErr = await checkReference('locations', b, 'department', 'Department', { allowInactive: true });
+            if (refErr) return res.status(400).json({ error: refErr });
+        }
+
+        const sets   = [];
+        const params = [];
+        for (const [k, v] of Object.entries(b)) {
+            if (v !== undefined) { params.push(v); sets.push(`${k}=$${params.length}`); }
+        }
+        params.push(id);
+
         const { rows, rowCount } = await query(
             `UPDATE employees SET ${sets.join(',')} , updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
             params
@@ -630,15 +624,19 @@ app.put('/api/employees/:id', can('employees:write'), async (req, res) => {
 
 // GET /api/assets
 app.get('/api/assets', can('assets:read'), async (req, res) => {
-    const { status, hardware_class, search, limit = 100, offset = 0 } = req.query;
+    const { status, category_id, search, limit = 100, offset = 0 } = req.query;
     const conds  = [];
     const params = [];
 
     if (status) {
         params.push(status); conds.push(`a.status=$${params.length}::asset_status`);
     }
-    if (hardware_class) {
-        params.push(hardware_class); conds.push(`a.hardware_class=$${params.length}::hardware_class`);
+    // category_id may be a subcategory, or a top-level category to match
+    // every subcategory under it.
+    if (category_id) {
+        if (!isUUID(category_id)) return res.status(400).json({ error: 'Invalid category_id.' });
+        params.push(category_id);
+        conds.push(`(cp.id=$${params.length} OR cp.parent_id=$${params.length})`);
     }
     if (search) {
         params.push(`%${sanitizeStr(search)}%`);
@@ -652,7 +650,11 @@ app.get('/api/assets', can('assets:read'), async (req, res) => {
 
     try {
         const { rows } = await query(
-            `SELECT a.id, a.asset_tag, a.serial_number, a.qr_code, a.hardware_class,
+            `SELECT a.id, a.asset_tag, a.serial_number, a.qr_code,
+                    a.category_id, cp.parent_id AS parent_category_id,
+                    cp.category, cp.subcategory,
+                    a.catalog_item_id,
+                    (SELECT COUNT(*) FROM asset_receipts ar WHERE ar.asset_id=a.id)::int AS receipt_count,
                     a.vendor, a.model, a.purchase_price, a.purchase_date,
                     a.warranty_expiry, a.depreciation_years, a.status,
                     a.location, a.notes, a.created_at, a.updated_at,
@@ -660,10 +662,11 @@ app.get('/api/assets', can('assets:read'), async (req, res) => {
                     e.employee_code AS assigned_to_code,
                     asgn.assigned_at
              FROM assets a
+             JOIN device_category_paths cp ON cp.id=a.category_id
              LEFT JOIN assignments asgn ON asgn.asset_id=a.id AND asgn.returned_at IS NULL
              LEFT JOIN employees   e    ON e.id=asgn.employee_id
              ${where}
-             ORDER BY a.hardware_class, a.asset_tag
+             ORDER BY cp.category_sort, cp.category, cp.subcategory_sort, cp.subcategory, a.asset_tag
              LIMIT $${params.length-1} OFFSET $${params.length}`,
             params
         );
@@ -674,29 +677,32 @@ app.get('/api/assets', can('assets:read'), async (req, res) => {
     }
 });
 
-// GET /api/assets/suggestions?hardware_class=Laptop
-// Distinct vendor/model combos already seen for a device type, so the "New
+// GET /api/assets/suggestions?category_id=<subcategory uuid>
+// Distinct vendor/model combos already seen for a subcategory, so the "New
 // asset" form can autocomplete from what's already in inventory instead of
 // re-typing "Dell / Latitude 5420" from scratch every time. Also returns
 // each combo's most recent purchase_price/depreciation_years as a filled-in
 // starting point (all still editable before saving).
 app.get('/api/assets/suggestions', can('assets:read'), async (req, res) => {
-    const { hardware_class } = req.query;
+    const { category_id } = req.query;
     const conds  = [];
     const params = [];
-    if (hardware_class) {
-        params.push(hardware_class);
-        conds.push(`hardware_class=$${params.length}::hardware_class`);
+    if (category_id) {
+        if (!isUUID(category_id)) return res.status(400).json({ error: 'Invalid category_id.' });
+        params.push(category_id);
+        conds.push(`a.category_id=$${params.length}`);
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     try {
         const { rows } = await query(
-            `SELECT DISTINCT ON (hardware_class, vendor, model)
-                    hardware_class, vendor, model, purchase_price, depreciation_years,
-                    location, warranty_expiry, purchase_date
-             FROM assets
+            `SELECT DISTINCT ON (a.category_id, a.vendor, a.model)
+                    a.category_id, cp.category, cp.subcategory,
+                    a.vendor, a.model, a.purchase_price, a.depreciation_years,
+                    a.location, a.warranty_expiry, a.purchase_date
+             FROM assets a
+             JOIN device_category_paths cp ON cp.id=a.category_id
              ${where}
-             ORDER BY hardware_class, vendor, model, created_at DESC
+             ORDER BY a.category_id, a.vendor, a.model, a.created_at DESC
              LIMIT 200`,
             params
         );
@@ -709,45 +715,90 @@ app.get('/api/assets/suggestions', can('assets:read'), async (req, res) => {
 
 // POST /api/assets
 app.post('/api/assets', can('assets:write'), async (req, res) => {
-    const ALLOWED = ['asset_tag','serial_number','qr_code','hardware_class','vendor',
+    const ALLOWED = ['asset_tag','serial_number','qr_code','category_id','catalog_item_id','vendor',
                      'model','purchase_price','purchase_date','warranty_expiry',
                      'depreciation_years','status','location','notes'];
     const b = sanitizeObj(req.body, ALLOWED);
+    const blank = (v) => v === undefined || v === null || v === '';
 
-    if (!b.asset_tag || !b.serial_number || !b.hardware_class || !b.model)
-        return res.status(400).json({ error: 'asset_tag, serial_number, hardware_class, and model are required.' });
-
-    const VALID_CLASSES = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral'];
-    if (!VALID_CLASSES.includes(b.hardware_class))
-        return res.status(400).json({ error: `Invalid hardware_class. Must be one of: ${VALID_CLASSES.join(', ')}` });
+    if (!b.asset_tag || !b.serial_number)
+        return res.status(400).json({ error: 'asset_tag and serial_number are required.' });
+    if (!blank(b.catalog_item_id) && !isUUID(b.catalog_item_id))
+        return res.status(400).json({ error: 'Invalid catalog_item_id.' });
+    if (!blank(b.purchase_date) && !isDate(b.purchase_date))
+        return res.status(400).json({ error: 'purchase_date must be YYYY-MM-DD.' });
 
     const VALID_STATUS = ['Assigned','In-Hand','Faulty','Ordered','Need to Order'];
     if (b.status && !VALID_STATUS.includes(b.status))
         return res.status(400).json({ error: 'Invalid status value.' });
 
     try {
-        const { rows } = await query(
-            `INSERT INTO assets
-             (asset_tag,serial_number,qr_code,hardware_class,vendor,model,
-              purchase_price,purchase_date,warranty_expiry,depreciation_years,
-              status,location,notes,created_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-            [b.asset_tag, b.serial_number, b.qr_code||null, b.hardware_class,
-             b.vendor||null, b.model,
-             b.purchase_price ? parseFloat(b.purchase_price) : null,
-             b.purchase_date||null, b.warranty_expiry||null,
-             b.depreciation_years ? parseInt(b.depreciation_years, 10) : null,
-             b.status||'In-Hand', b.location||null, b.notes||null, req.session.userId]
-        );
+        // Creating from a catalogue entry: anything the form left blank is
+        // filled from the entry (category, vendor, model, price, depreciation,
+        // and warranty expiry = purchase date + the entry's warranty months).
+        if (!blank(b.catalog_item_id)) {
+            const { rows: [ci] } = await query('SELECT * FROM catalog_items WHERE id=$1', [b.catalog_item_id]);
+            if (!ci) return res.status(400).json({ error: 'Catalogue item not found.' });
+            if (!ci.is_active) return res.status(400).json({ error: 'That catalogue item is inactive.' });
+            if (blank(b.category_id)) b.category_id = ci.category_id;
+            if (blank(b.vendor)) b.vendor = ci.vendor;
+            if (blank(b.model)) b.model = ci.model;
+            if (blank(b.purchase_price)) b.purchase_price = ci.standard_price;
+            if (blank(b.depreciation_years)) b.depreciation_years = ci.depreciation_years;
+            if (blank(b.warranty_expiry) && ci.warranty_months != null && !blank(b.purchase_date)) {
+                const d = new Date(b.purchase_date + 'T00:00:00Z');
+                d.setUTCMonth(d.getUTCMonth() + ci.warranty_months);
+                b.warranty_expiry = d.toISOString().slice(0, 10);
+            }
+        }
 
-        // Authoritative registration entry in the immutable ledger
-        await query(
-            `INSERT INTO asset_history (asset_id,event_type,new_status,performed_by,notes)
-             VALUES ($1,'Asset Registered',$2,$3,'Asset registered into EDIMS inventory')`,
-            [rows[0].id, rows[0].status, req.session.userId]
-        );
+        if (blank(b.category_id) || blank(b.model))
+            return res.status(400).json({ error: 'category_id and model are required (or pick a catalogue item).' });
 
-        return res.status(201).json({ asset: rows[0] });
+        const price = parseNumber(b.purchase_price, 'purchase_price');
+        const dep   = parseNumber(b.depreciation_years, 'depreciation_years', { max: 50, integer: true });
+        if (price.error || dep.error) return res.status(400).json({ error: price.error || dep.error });
+
+        const catErr = await checkSubcategory(b.category_id)
+            || await checkReference('vendors', b, 'vendor', 'Vendor')
+            || await checkReference('locations', b, 'location', 'Department');
+        if (catErr) return res.status(400).json({ error: catErr });
+
+        // Not picked from the catalogue? Link to the matching entry if one exists.
+        if (blank(b.catalog_item_id)) {
+            const { rows: [match] } = await query(
+                `SELECT id FROM catalog_items
+                 WHERE category_id=$1 AND lower(COALESCE(vendor,''))=lower(COALESCE($2,'')) AND lower(model)=lower($3)`,
+                [b.category_id, b.vendor || null, b.model]
+            );
+            b.catalog_item_id = match ? match.id : null;
+        }
+
+        const asset = await withTransaction(async (client) => {
+            const { rows } = await client.query(
+                `INSERT INTO assets
+                 (asset_tag,serial_number,qr_code,category_id,catalog_item_id,vendor,model,
+                  purchase_price,purchase_date,warranty_expiry,depreciation_years,
+                  status,location,notes,created_by)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+                [b.asset_tag, b.serial_number, b.qr_code||null, b.category_id, b.catalog_item_id,
+                 b.vendor||null, b.model,
+                 price.value ?? null,
+                 b.purchase_date||null, b.warranty_expiry||null,
+                 dep.value ?? null,
+                 b.status||'In-Hand', b.location||null, b.notes||null, req.session.userId]
+            );
+
+            // Authoritative registration entry in the immutable ledger
+            await client.query(
+                `INSERT INTO asset_history (asset_id,event_type,new_status,performed_by,notes)
+                 VALUES ($1,'Asset Registered',$2,$3,'Asset registered into EDIMS inventory')`,
+                [rows[0].id, rows[0].status, req.session.userId]
+            );
+            return rows[0];
+        });
+
+        return res.status(201).json({ asset });
     } catch (err) {
         if (err.code === '23505') {
             const f = err.constraint?.includes('serial') ? 'Serial number' : 'Asset tag';
@@ -755,6 +806,8 @@ app.post('/api/assets', can('assets:write'), async (req, res) => {
         }
         if (err.code === '23514')
             return res.status(400).json({ error: 'Constraint violation: check status/location combination.' });
+        if (err.code === '22P02' || err.code === '22007' || err.code === '22008')
+            return res.status(400).json({ error: 'Invalid number or date value.' });
         console.error('[ASSETS] POST error:', err.message);
         return res.status(500).json({ error: 'Failed to create asset.' });
     }
@@ -765,28 +818,84 @@ app.put('/api/assets/:id', can('assets:write'), async (req, res) => {
     const { id } = req.params;
     if (!isUUID(id)) return res.status(400).json({ error: 'Invalid asset ID.' });
 
-    const ALLOWED = ['asset_tag','serial_number','qr_code','vendor','model',
+    const ALLOWED = ['asset_tag','serial_number','qr_code','category_id','catalog_item_id','vendor','model',
                      'purchase_price','purchase_date','warranty_expiry',
                      'depreciation_years','location','notes'];
     const b = sanitizeObj(req.body, ALLOWED);
-
-    const sets   = [];
-    const params = [];
-    for (const [k, v] of Object.entries(b)) {
-        if (v !== undefined) { params.push(v); sets.push(`${k}=$${params.length}`); }
+    // Blank optional fields are stored as NULL (FK columns can't hold '')
+    for (const k of ['catalog_item_id','vendor','location','qr_code','purchase_price','purchase_date',
+                     'warranty_expiry','depreciation_years','notes']) {
+        if (b[k] === '') b[k] = null;
     }
-    if (!sets.length) return res.status(400).json({ error: 'No fields to update.' });
-    params.push(id);
+    if (b.catalog_item_id != null && !isUUID(b.catalog_item_id))
+        return res.status(400).json({ error: 'Invalid catalog_item_id.' });
+    if (!Object.keys(b).length) return res.status(400).json({ error: 'No fields to update.' });
 
     try {
-        const { rows, rowCount } = await query(
-            `UPDATE assets SET ${sets.join(',')} , updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
-            params
-        );
-        if (!rowCount) return res.status(404).json({ error: 'Asset not found.' });
-        return res.json({ asset: rows[0] });
+        if (b.category_id !== undefined) {
+            const catErr = await checkSubcategory(b.category_id);
+            if (catErr) return res.status(400).json({ error: catErr });
+        }
+        // Existing values may be inactive references; only new picks must be
+        // active. (Also normalises b.vendor / b.location to the list's spelling.)
+        const refErr = (b.vendor !== undefined && await checkReference('vendors', b, 'vendor', 'Vendor', { allowInactive: true }))
+            || (b.location !== undefined && await checkReference('locations', b, 'location', 'Department', { allowInactive: true }));
+        if (refErr) return res.status(400).json({ error: refErr });
+
+        const sets   = [];
+        const params = [];
+        for (const [k, v] of Object.entries(b)) {
+            if (v !== undefined) { params.push(v); sets.push(`${k}=$${params.length}`); }
+        }
+        params.push(id);
+
+        const asset = await withTransaction(async (client) => {
+            const before = await client.query(
+                `SELECT a.category_id, a.status, cp.path
+                 FROM assets a JOIN device_category_paths cp ON cp.id=a.category_id
+                 WHERE a.id=$1 FOR UPDATE OF a`,
+                [id]
+            );
+            if (!before.rowCount) return null;
+
+            const { rows } = await client.query(
+                `UPDATE assets SET ${sets.join(',')} , updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
+                params
+            );
+
+            const old = before.rows[0];
+            if (b.category_id !== undefined && b.category_id !== old.category_id) {
+                const { rows: [now] } = await client.query(
+                    'SELECT path FROM device_category_paths WHERE id=$1', [b.category_id]
+                );
+                await client.query(
+                    `INSERT INTO asset_history (asset_id,event_type,old_status,new_status,performed_by,notes,metadata)
+                     VALUES ($1,'Category Changed',$2,$2,$3,$4,$5)`,
+                    [id, old.status, req.session.userId,
+                     `Category changed: ${old.path} → ${now.path}`,
+                     { old_category_id: old.category_id, new_category_id: b.category_id }]
+                );
+            }
+
+            // A catalogue link must stay within the device's subcategory
+            const { rows: [fixed] } = await client.query(
+                `UPDATE assets a SET catalog_item_id=NULL
+                 WHERE a.id=$1 AND a.catalog_item_id IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM catalog_items ci WHERE ci.id=a.catalog_item_id AND ci.category_id=a.category_id)
+                 RETURNING *`,
+                [id]
+            );
+            return fixed || rows[0];
+        });
+
+        if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+        return res.json({ asset });
     } catch (err) {
         if (err.code === '23505') return res.status(409).json({ error: 'Asset tag or serial number already exists.' });
+        if (err.code === '23503') return res.status(400).json({ error: 'Referenced catalogue item, vendor or department does not exist.' });
+        if (err.code === '23514') return res.status(400).json({ error: 'Constraint violation: a retired asset cannot have a department.' });
+        if (err.code === '22P02' || err.code === '22007' || err.code === '22008')
+            return res.status(400).json({ error: 'Invalid number or date value.' });
         console.error('[ASSETS] PUT error:', err.message);
         return res.status(500).json({ error: 'Failed to update asset.' });
     }
@@ -877,10 +986,11 @@ app.post('/api/assignments/create', can('assignments:write'), async (req, res) =
         await query('CALL assign_asset($1,$2,$3,$4)', [asset_id, employee_id, req.session.userId, sanitizeStr(notes)]);
         const { rows } = await query(
             `SELECT asgn.id, asgn.asset_id, asgn.employee_id, asgn.assigned_at,
-                    a.asset_tag, a.hardware_class, a.model,
+                    a.asset_tag, cp.category, cp.subcategory, a.model,
                     e.full_name AS employee_name, e.employee_code
              FROM assignments asgn
              JOIN assets    a ON a.id=asgn.asset_id
+             JOIN device_category_paths cp ON cp.id=a.category_id
              JOIN employees e ON e.id=asgn.employee_id
              WHERE asgn.asset_id=$1 AND asgn.returned_at IS NULL`,
             [asset_id]
@@ -931,11 +1041,12 @@ app.get('/api/assignments', can('assets:read'), async (req, res) => {
     try {
         const { rows } = await query(
             `SELECT asgn.id, asgn.assigned_at,
-                    a.id AS asset_id, a.asset_tag, a.hardware_class, a.model, a.serial_number,
+                    a.id AS asset_id, a.asset_tag, cp.category, cp.subcategory, a.model, a.serial_number,
                     e.id AS employee_id, e.full_name, e.employee_code, e.department,
                     u.username AS assigned_by_username
              FROM assignments asgn
              JOIN assets    a ON a.id=asgn.asset_id
+             JOIN device_category_paths cp ON cp.id=a.category_id
              JOIN employees e ON e.id=asgn.employee_id
              JOIN users     u ON u.id=asgn.assigned_by
              WHERE ${conds.join(' AND ')}
@@ -958,9 +1069,13 @@ app.get('/api/assignments', can('assets:read'), async (req, res) => {
 app.get('/api/procurement', can('procurement:read'), async (req, res) => {
     try {
         const [dash, alerts] = await Promise.all([
-            query('SELECT * FROM procurement_dashboard ORDER BY hardware_class::text', []),
-            query(`SELECT pa.*, u.username AS resolved_by_username
+            query(`SELECT pd.*
+                   FROM procurement_dashboard pd
+                   JOIN device_category_paths cp ON cp.id=pd.category_id
+                   ORDER BY cp.category_sort, cp.category, cp.subcategory_sort, cp.subcategory`, []),
+            query(`SELECT pa.*, cp.category, cp.subcategory, u.username AS resolved_by_username
                    FROM procurement_alerts pa
+                   JOIN device_category_paths cp ON cp.id=pa.category_id
                    LEFT JOIN users u ON u.id=pa.resolved_by
                    ORDER BY pa.created_at DESC LIMIT 100`, []),
         ]);
@@ -993,23 +1108,22 @@ app.put('/api/procurement/:id/resolve', can('procurement:write'), async (req, re
     }
 });
 
-// POST /api/procurement/alerts — manually raise an order/alert for a hardware
-// class (as opposed to the ones the DB trigger opens automatically when
-// In-Hand stock drops to/below that class's threshold).
+// POST /api/procurement/alerts — manually raise an order/alert for a
+// subcategory (as opposed to the ones the DB trigger opens automatically
+// when In-Hand stock drops to/below that subcategory's threshold).
 app.post('/api/procurement/alerts', can('procurement:write'), async (req, res) => {
-    const VALID_CLASSES = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral'];
-    const hardware_class = sanitizeStr(req.body.hardware_class);
+    const category_id = sanitizeStr(req.body.category_id);
     const notes = sanitizeStr(req.body.notes);
 
-    if (!hardware_class || !VALID_CLASSES.includes(hardware_class))
-        return res.status(400).json({ error: `hardware_class is required and must be one of: ${VALID_CLASSES.join(', ')}` });
-
     try {
+        const catErr = await checkSubcategory(category_id);
+        if (catErr) return res.status(400).json({ error: catErr });
+
         const { rows } = await query(
-            `INSERT INTO procurement_alerts (hardware_class, notes)
+            `INSERT INTO procurement_alerts (category_id, notes)
              VALUES ($1, $2)
              RETURNING *`,
-            [hardware_class, notes || 'Manually requested order.']
+            [category_id, notes || 'Manually requested order.']
         );
         return res.status(201).json({ alert: rows[0] });
     } catch (err) {
@@ -1018,36 +1132,35 @@ app.post('/api/procurement/alerts', can('procurement:write'), async (req, res) =
     }
 });
 
-// PUT /api/procurement/thresholds/:hardware_class — set the low-stock
-// threshold used by the DB trigger that auto-opens alerts. Requires
-// migration-002.sql (procurement_thresholds table) to be applied.
-app.put('/api/procurement/thresholds/:hardware_class', can('procurement:write'), async (req, res) => {
-    const VALID_CLASSES = ['MacBook','Laptop','Monitor','Jabra Headset','Keyboard','Mouse','Peripheral'];
-    const hardware_class = sanitizeStr(req.params.hardware_class);
+// PUT /api/procurement/thresholds/:category_id — set a subcategory's
+// low-stock threshold used by the DB trigger that auto-opens alerts.
+app.put('/api/procurement/thresholds/:category_id', can('procurement:write'), async (req, res) => {
+    const { category_id } = req.params;
     const threshold_qty = parseInt(req.body.threshold_qty, 10);
 
-    if (!VALID_CLASSES.includes(hardware_class))
-        return res.status(400).json({ error: `Invalid hardware_class. Must be one of: ${VALID_CLASSES.join(', ')}` });
     if (!Number.isInteger(threshold_qty) || threshold_qty < 0 || threshold_qty > 100000)
         return res.status(400).json({ error: 'threshold_qty must be a non-negative integer.' });
 
     try {
+        const catErr = await checkSubcategory(category_id, { requireActive: false });
+        if (catErr) return res.status(400).json({ error: catErr });
+
         const { rows, rowCount } = await query(
-            `INSERT INTO procurement_thresholds (hardware_class, threshold_qty, updated_by, updated_at)
+            `INSERT INTO procurement_thresholds (category_id, threshold_qty, updated_by, updated_at)
              VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (hardware_class) DO UPDATE SET
+             ON CONFLICT (category_id) DO UPDATE SET
                  threshold_qty = EXCLUDED.threshold_qty,
                  updated_by    = EXCLUDED.updated_by,
                  updated_at    = NOW()
              RETURNING *`,
-            [hardware_class, threshold_qty, req.session.userId]
+            [category_id, threshold_qty, req.session.userId]
         );
         if (!rowCount) return res.status(500).json({ error: 'Failed to update threshold.' });
         return res.json({ threshold: rows[0] });
     } catch (err) {
-        if (err.code === '42P01') { // undefined_table — migration-002 not applied yet
-            console.error('[PROCUREMENT] Threshold update error: procurement_thresholds table missing. Run npm run db:migrate2.');
-            return res.status(500).json({ error: 'Threshold storage is not set up yet. Run the migration-002 database migration.' });
+        if (err.code === '42P01') { // undefined_table — migrations not applied yet
+            console.error('[PROCUREMENT] Threshold update error: a required table is missing. Run npm run db:migrate2 and db:migrate3.');
+            return res.status(500).json({ error: 'Threshold storage is not set up yet. Run the migration-002 and migration-003 database migrations.' });
         }
         console.error('[PROCUREMENT] Threshold update error:', err.message);
         return res.status(500).json({ error: 'Failed to update threshold.' });
@@ -1118,10 +1231,11 @@ app.get('/api/audits', can('audits:read'), async (req, res) => {
 
     try {
         const { rows } = await query(
-            `SELECT al.*, a.asset_tag, a.hardware_class,
+            `SELECT al.*, a.asset_tag, cp.category, cp.subcategory,
                     e.full_name AS employee_name, u.username AS performed_by_username
              FROM audit_logs al
              LEFT JOIN assets    a ON a.id=al.asset_id
+             LEFT JOIN device_category_paths cp ON cp.id=a.category_id
              LEFT JOIN employees e ON e.id=al.employee_id
              LEFT JOIN users     u ON u.id=al.performed_by
              ${where}
@@ -1133,6 +1247,159 @@ app.get('/api/audits', can('audits:read'), async (req, res) => {
     } catch (err) {
         console.error('[AUDITS] GET error:', err.message);
         return res.status(500).json({ error: 'Failed to retrieve audit logs.' });
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEVICE CATEGORIES
+// Two-level tree: top-level categories (parent_id NULL) contain
+// subcategories; devices are always filed under a subcategory. Reads are
+// open to every role (the asset forms need them); changes are Admin only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function categoryDbError(res, err, fallback) {
+    if (err.code === '23505')
+        return res.status(409).json({ error: 'A category with that name already exists at this level.' });
+    if (err.code === '23503')
+        return res.status(400).json({ error: 'Parent category not found.' });
+    if (err.code === '23514')
+        return res.status(400).json({ error: 'Name must be 1–100 characters.' });
+    if (err.code === 'P0003')
+        return res.status(400).json({ error: err.message });
+    console.error('[CATEGORIES]', fallback, err.message);
+    return res.status(500).json({ error: fallback });
+}
+
+function parseSortOrder(v) {
+    if (v === undefined || v === null || v === '') return { value: undefined };
+    const n = parseInt(v, 10);
+    if (!Number.isInteger(n) || n < -100000 || n > 100000) return { error: 'sort_order must be an integer.' };
+    return { value: n };
+}
+
+// GET /api/categories — the whole tree, inactive rows included (flagged),
+// with device counts per subcategory and rolled up per category.
+app.get('/api/categories', can('assets:read'), async (req, res) => {
+    try {
+        const { rows } = await query(
+            `SELECT c.id, c.parent_id, c.name, c.description, c.sort_order, c.is_active,
+                    c.created_at, c.updated_at,
+                    (SELECT COUNT(*) FROM assets a WHERE a.category_id = c.id)::int AS asset_count
+             FROM device_categories c
+             ORDER BY c.sort_order, lower(c.name)`,
+            []
+        );
+        const tops = rows.filter(r => !r.parent_id).map(r => ({ ...r, subcategories: [] }));
+        const byId = new Map(tops.map(t => [t.id, t]));
+        for (const r of rows) {
+            if (r.parent_id && byId.has(r.parent_id)) byId.get(r.parent_id).subcategories.push(r);
+        }
+        for (const t of tops) t.asset_count = t.subcategories.reduce((n, s) => n + s.asset_count, 0);
+        return res.json({ categories: tops });
+    } catch (err) {
+        console.error('[CATEGORIES] GET error:', err.message);
+        return res.status(500).json({ error: 'Failed to retrieve categories.' });
+    }
+});
+
+// POST /api/categories — { name, description?, sort_order?, parent_id? }
+// Omit parent_id to create a top-level category; pass a top-level
+// category's id to create a subcategory under it.
+app.post('/api/categories', can('categories:manage'), async (req, res) => {
+    const b = sanitizeObj(req.body, ['name', 'description', 'sort_order', 'parent_id']);
+    if (!b.name) return res.status(400).json({ error: 'name is required.' });
+    if (b.parent_id && !isUUID(b.parent_id)) return res.status(400).json({ error: 'Invalid parent_id.' });
+    const sort = parseSortOrder(b.sort_order);
+    if (sort.error) return res.status(400).json({ error: sort.error });
+
+    try {
+        const { rows } = await query(
+            `INSERT INTO device_categories (parent_id, name, description, sort_order, created_by)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [b.parent_id || null, b.name, b.description || null, sort.value ?? 0, req.session.userId]
+        );
+        return res.status(201).json({ category: rows[0] });
+    } catch (err) {
+        return categoryDbError(res, err, 'Failed to create category.');
+    }
+});
+
+// PUT /api/categories/:id — { name?, description?, sort_order?, is_active?, parent_id? }
+// parent_id can only move a subcategory under another top-level category;
+// a row can't switch between being a category and a subcategory.
+app.put('/api/categories/:id', can('categories:manage'), async (req, res) => {
+    const { id } = req.params;
+    if (!isUUID(id)) return res.status(400).json({ error: 'Invalid category ID.' });
+
+    const b = sanitizeObj(req.body, ['name', 'description', 'sort_order', 'is_active', 'parent_id']);
+    const sets   = [];
+    const params = [];
+    const set = (col, v) => { params.push(v); sets.push(`${col}=$${params.length}`); };
+
+    if (b.name !== undefined) {
+        if (!b.name) return res.status(400).json({ error: 'name cannot be empty.' });
+        set('name', b.name);
+    }
+    if (b.description !== undefined) set('description', b.description || null);
+    if (b.sort_order !== undefined) {
+        const sort = parseSortOrder(b.sort_order);
+        if (sort.error) return res.status(400).json({ error: sort.error });
+        if (sort.value !== undefined) set('sort_order', sort.value);
+    }
+    if (b.is_active !== undefined) {
+        if (typeof b.is_active !== 'boolean') return res.status(400).json({ error: 'is_active must be true or false.' });
+        set('is_active', b.is_active);
+    }
+    if (b.parent_id !== undefined) {
+        if (b.parent_id !== null && !isUUID(b.parent_id)) return res.status(400).json({ error: 'Invalid parent_id.' });
+        if (b.parent_id === id) return res.status(400).json({ error: 'A category cannot be its own parent.' });
+        set('parent_id', b.parent_id);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update.' });
+    params.push(id);
+
+    try {
+        const { rows, rowCount } = await query(
+            `UPDATE device_categories SET ${sets.join(',')}, updated_at=NOW()
+             WHERE id=$${params.length} RETURNING *`,
+            params
+        );
+        if (!rowCount) return res.status(404).json({ error: 'Category not found.' });
+        return res.json({ category: rows[0] });
+    } catch (err) {
+        return categoryDbError(res, err, 'Failed to update category.');
+    }
+});
+
+// DELETE /api/categories/:id — only for empty rows. A category must have no
+// subcategories; a subcategory must hold no devices (its procurement
+// threshold and alert history are removed with it). Deactivate instead to
+// retire a category that's still in use.
+app.delete('/api/categories/:id', can('categories:manage'), async (req, res) => {
+    const { id } = req.params;
+    if (!isUUID(id)) return res.status(400).json({ error: 'Invalid category ID.' });
+
+    try {
+        const { rows } = await query(
+            `SELECT
+                 (SELECT COUNT(*) FROM device_categories WHERE parent_id=$1)::int AS children,
+                 (SELECT COUNT(*) FROM assets WHERE category_id=$1)::int          AS assets,
+                 EXISTS (SELECT 1 FROM device_categories WHERE id=$1)             AS found`,
+            [id]
+        );
+        const chk = rows[0];
+        if (!chk.found) return res.status(404).json({ error: 'Category not found.' });
+        if (chk.children)
+            return res.status(409).json({ error: `Category still has ${chk.children} subcategor${chk.children === 1 ? 'y' : 'ies'}. Delete or move them first.` });
+        if (chk.assets)
+            return res.status(409).json({ error: `${chk.assets} device(s) are filed under this subcategory. Move them first, or deactivate it instead.` });
+
+        await query('DELETE FROM device_categories WHERE id=$1', [id]);
+        return res.json({ success: true });
+    } catch (err) {
+        if (err.code === '23503')
+            return res.status(409).json({ error: 'Category is still in use. Deactivate it instead.' });
+        return categoryDbError(res, err, 'Failed to delete category.');
     }
 });
 
@@ -1260,6 +1527,23 @@ app.use('/api/export',   require('./routes/export')(pool, can));
 // ─────────────────────────────────────────────────────────────────────────────
 app.use('/api/hardware', require('./routes/scraper')(can));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE DATA  /api/reference/vendors|locations
+// CATALOGUE       /api/catalog
+// LABELS          /api/labels/:assetId/qr.png|qr.svg|barcode.png|barcode.svg|label.pdf
+//                 /api/labels/sheet.pdf?ids=…
+// RECEIPTS        /api/receipts
+// INVOICES        /api/invoices
+// ─────────────────────────────────────────────────────────────────────────────
+function roleCan(role, permission) {
+    return (PERMS[permission] || []).includes(role);
+}
+app.use('/api/reference', require('./routes/reference')(db, can));
+app.use('/api/catalog',   require('./routes/catalog')(db, can));
+app.use('/api/labels',    require('./routes/labels')(db, can));
+app.use('/api/receipts',  require('./routes/receipts')(db, can, roleCan));
+app.use('/api/invoices',  require('./routes/invoices')(db, can));
+
 // Serve cached hardware images as static files (webp, 7-day cache)
 const HW_IMAGES = path.join(__dirname, 'public', 'images', 'hardware');
 app.use('/images/hardware', express.static(HW_IMAGES, { maxAge: '7d' }));
@@ -1288,6 +1572,12 @@ app.get('*', (req, res) => {
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+    // Body-parser errors carry their own 4xx status (e.g. 413 too large,
+    // 400 malformed JSON) — pass those through instead of reporting a 500.
+    if (err.type === 'entity.too.large')
+        return res.status(413).json({ error: 'Request is too large.' });
+    if (err.status >= 400 && err.status < 500 && err.expose)
+        return res.status(err.status).json({ error: err.message });
     console.error('[EXPRESS] Unhandled error:', err.message, err.stack);
     return res.status(500).json({ error: 'Internal server error.' });
 });

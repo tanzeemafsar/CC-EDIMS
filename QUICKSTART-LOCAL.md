@@ -46,7 +46,26 @@ bash setup-local.sh
 The script is safe to run more than once. It will, only where needed:
 create the `edims_db` database and the `edims_app` role, write a `.env` with a
 freshly generated `SESSION_SECRET`, run `npm install`, apply `schema.sql` and
-`migration-001.sql`, and create the first Admin login.
+`migration-001.sql` → `migration-004.sql`, and create the first Admin login.
+
+**Upgrading an existing database?** Take a backup, then apply the migrations
+you're missing, in order: `npm run db:migrate2` (if not done yet),
+`npm run db:migrate3`, `npm run db:migrate4`.
+
+- **003** replaces the fixed device types with admin-managed categories and
+  subcategories (the **Types** screen); existing devices, procurement
+  thresholds and alerts move onto matching subcategories automatically. It
+  drops the old `hardware_class` column and type.
+- **004** adds reference data (**Reference**: vendors, departments), the
+  product **Catalogue**, receipt uploads and **Invoices**. Existing free-text
+  vendor / department values are collected into the reference lists
+  (spellings differing only by case are merged), and the catalogue is seeded
+  from the models already in inventory.
+
+Optional settings for invoices and labels (`ORG_NAME`, `ORG_ADDRESS`,
+`DEFAULT_CURRENCY`, `PUBLIC_URL`, `UPLOADS_DIR`) are described in
+`.env.example`. Uploaded receipts are stored in `uploads/` — back that folder
+up together with the database.
 
 Then start the server:
 
@@ -137,9 +156,6 @@ npm start                            # auto-detects the certs, switches to HTTPS
 - **Account lockout:** 5 wrong passwords locks an account for 30 minutes. If you
   lock yourself out while testing, wait it out or clear it in SQL:
   `UPDATE users SET failed_login_attempts=0, locked_until=NULL WHERE username='admin';`
-- **Commit a lockfile:** the bundle ships without `package-lock.json`. After the
-  first `npm install`, commit the generated lockfile so future installs are
-  reproducible (and `npm ci` works).
 - **Sessions table grows:** `connect-pg-simple` prunes expired sessions every
   15 minutes while the server runs, so for normal use this is handled.
 - **`schema.sql` is a reconstruction** (see the deployment guide). It satisfies

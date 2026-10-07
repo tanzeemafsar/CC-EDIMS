@@ -7,5 +7,6 @@ npm-debug.log
 *.kate-swp
 logs
 certs
+uploads
 public/images/hardware/*
 !public/images/hardware/.gitkeep

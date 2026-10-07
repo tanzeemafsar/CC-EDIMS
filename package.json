@@ -22,10 +22,13 @@
     "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
     "db:migrate": "psql \"$DATABASE_URL\" -f migration-001.sql",
     "db:migrate2": "psql \"$DATABASE_URL\" -f migration-002.sql",
+    "db:migrate3": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-003.sql",
+    "db:migrate4": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-004.sql",
     "gen-cert": "bash scripts/gen-local-cert.sh"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.11.4",
     "cheerio": "^1.0.0",
     "connect-pg-simple": "^9.0.1",
     "csv-stringify": "^6.5.1",
@@ -34,6 +37,7 @@
     "express-session": "^1.18.0",
     "pdfkit": "^0.15.0",
     "pg": "^8.12.0",
+    "qrcode": "^1.5.4",
     "sharp": "^0.33.5"
   },
   "devDependencies": {

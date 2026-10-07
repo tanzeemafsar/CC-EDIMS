@@ -142,7 +142,7 @@ module.exports = function exportRoutes(pool, can) {
     try {
       const { rows } = await pool.query(
         `SELECT
-             a.asset_tag, a.serial_number, a.qr_code, a.hardware_class,
+             a.asset_tag, a.serial_number, a.qr_code, cp.category, cp.subcategory,
              a.vendor, a.model, a.status, a.location,
              a.purchase_price, a.purchase_date, a.warranty_expiry,
              a.depreciation_years, a.notes,
@@ -151,14 +151,16 @@ module.exports = function exportRoutes(pool, can) {
              asgn.assigned_at,
              a.created_at,   a.updated_at
          FROM assets a
+         JOIN device_category_paths cp ON cp.id = a.category_id
          LEFT JOIN assignments asgn ON asgn.asset_id = a.id AND asgn.returned_at IS NULL
          LEFT JOIN employees   e    ON e.id = asgn.employee_id
-         ORDER BY a.hardware_class, a.asset_tag`
+         ORDER BY cp.category_sort, cp.category, cp.subcategory_sort, cp.subcategory, a.asset_tag`
       );
       streamCsv(res, `edims-assets-${Date.now()}.csv`, rows, [
         { key: 'asset_tag',          header: 'Asset Tag' },
         { key: 'serial_number',      header: 'Serial Number' },
-        { key: 'hardware_class',     header: 'Hardware Class' },
+        { key: 'category',           header: 'Category' },
+        { key: 'subcategory',        header: 'Subcategory' },
         { key: 'vendor',             header: 'Vendor' },
         { key: 'model',              header: 'Model' },
         { key: 'status',             header: 'Status' },
@@ -230,7 +232,7 @@ module.exports = function exportRoutes(pool, can) {
     try {
       const { rows } = await pool.query(
         `SELECT
-             a.asset_tag, a.hardware_class, a.model, a.serial_number,
+             a.asset_tag, cp.category, cp.subcategory, a.model, a.serial_number,
              e.employee_code, e.full_name, e.department, e.designation,
              asgn.assigned_at,
              asgn.returned_at,
@@ -239,6 +241,7 @@ module.exports = function exportRoutes(pool, can) {
              u_r.username AS returned_by
          FROM assignments asgn
          JOIN assets    a   ON a.id   = asgn.asset_id
+         JOIN device_category_paths cp ON cp.id = a.category_id
          JOIN employees e   ON e.id   = asgn.employee_id
          JOIN users     u_a ON u_a.id = asgn.assigned_by
          LEFT JOIN users u_r ON u_r.id = asgn.returned_by
@@ -246,7 +249,8 @@ module.exports = function exportRoutes(pool, can) {
       );
       streamCsv(res, `edims-assignments-${Date.now()}.csv`, rows, [
         { key: 'asset_tag',     header: 'Asset Tag' },
-        { key: 'hardware_class',header: 'Class' },
+        { key: 'category',      header: 'Category' },
+        { key: 'subcategory',   header: 'Subcategory' },
         { key: 'model',         header: 'Model' },
         { key: 'serial_number', header: 'Serial' },
         { key: 'employee_code', header: 'Employee Code' },
@@ -271,7 +275,7 @@ module.exports = function exportRoutes(pool, can) {
     try {
       const { rows } = await pool.query(
         `SELECT
-             a.asset_tag, a.hardware_class,
+             a.asset_tag, cp.category, cp.subcategory,
              ah.event_type, ah.old_status, ah.new_status,
              e.full_name  AS employee,
              u.username   AS performed_by,
@@ -279,6 +283,7 @@ module.exports = function exportRoutes(pool, can) {
              ah.created_at
          FROM asset_history ah
          JOIN  assets    a ON a.id = ah.asset_id
+         JOIN  device_category_paths cp ON cp.id = a.category_id
          LEFT JOIN employees e ON e.id = ah.employee_id
          LEFT JOIN users     u ON u.id = ah.performed_by
          ORDER BY ah.created_at DESC`
@@ -286,7 +291,8 @@ module.exports = function exportRoutes(pool, can) {
       streamCsv(res, `edims-history-${Date.now()}.csv`, rows, [
         { key: 'created_at',    header: 'Timestamp' },
         { key: 'asset_tag',     header: 'Asset Tag' },
-        { key: 'hardware_class',header: 'Class' },
+        { key: 'category',      header: 'Category' },
+        { key: 'subcategory',   header: 'Subcategory' },
         { key: 'event_type',    header: 'Event' },
         { key: 'old_status',    header: 'From Status' },
         { key: 'new_status',    header: 'To Status' },
@@ -302,20 +308,21 @@ module.exports = function exportRoutes(pool, can) {
 
   // ─────────────────────────────────────────────────────────────────────────
   // GET /api/export/assets.pdf
-  // Full asset inventory report grouped by hardware class
+  // Full asset inventory report grouped by category / subcategory
   // ─────────────────────────────────────────────────────────────────────────
   router.get('/assets.pdf', can('assets:read'), async (req, res) => {
     try {
       const [summaryRes, assetsRes] = await Promise.all([
         pool.query('SELECT * FROM dashboard_inventory_summary'),
         pool.query(
-          `SELECT a.asset_tag, a.serial_number, a.hardware_class, a.vendor, a.model,
+          `SELECT a.asset_tag, a.serial_number, cp.path AS category_path, a.vendor, a.model,
                   a.status, a.location, a.warranty_expiry,
                   e.full_name AS assigned_to, e.employee_code
            FROM assets a
+           JOIN device_category_paths cp ON cp.id=a.category_id
            LEFT JOIN assignments asgn ON asgn.asset_id=a.id AND asgn.returned_at IS NULL
            LEFT JOIN employees   e    ON e.id=asgn.employee_id
-           ORDER BY a.hardware_class, a.status, a.asset_tag`
+           ORDER BY cp.category_sort, cp.category, cp.subcategory_sort, cp.subcategory, a.status, a.asset_tag`
         ),
       ]);
 
@@ -373,8 +380,8 @@ module.exports = function exportRoutes(pool, can) {
       doc.y = statY + 52;
       doc.moveDown(1);
 
-      // ── Per-class tables ─────────────────────────────────────────────────
-      const classes = [...new Set(assetsRes.rows.map((r) => r.hardware_class))];
+      // ── Per-subcategory tables ───────────────────────────────────────────
+      const classes = [...new Set(assetsRes.rows.map((r) => r.category_path))];
       const COLS = [
         { key: 'asset_tag',     header: 'Asset Tag',    width: 90  },
         { key: 'serial_number', header: 'Serial',       width: 120 },
@@ -387,7 +394,7 @@ module.exports = function exportRoutes(pool, can) {
       ];
 
       for (const cls of classes) {
-        const clsRows = assetsRes.rows.filter((r) => r.hardware_class === cls);
+        const clsRows = assetsRes.rows.filter((r) => r.category_path === cls);
 
         // Add page if little space remains
         if (doc.y > doc.page.height - 120) doc.addPage();
@@ -427,12 +434,13 @@ module.exports = function exportRoutes(pool, can) {
     try {
       const { rows } = await pool.query(
         `SELECT al.audit_date, al.audit_type, al.verification_status,
-                a.asset_tag, a.hardware_class,
+                a.asset_tag, cp.subcategory,
                 e.full_name   AS employee_name, e.employee_code,
                 u.username    AS performed_by,
                 al.notes, al.discrepancy_notes
          FROM audit_logs al
          LEFT JOIN assets    a ON a.id = al.asset_id
+         LEFT JOIN device_category_paths cp ON cp.id = a.category_id
          LEFT JOIN employees e ON e.id = al.employee_id
          LEFT JOIN users     u ON u.id = al.performed_by
          ${where}
@@ -481,7 +489,7 @@ module.exports = function exportRoutes(pool, can) {
         { key: 'audit_date',        header: 'Date',         width: 100 },
         { key: 'audit_type',        header: 'Type',         width: 70  },
         { key: 'asset_tag',         header: 'Asset Tag',    width: 90  },
-        { key: 'hardware_class',    header: 'Class',        width: 90  },
+        { key: 'subcategory',       header: 'Type',         width: 90  },
         { key: 'employee_code',     header: 'Emp Code',     width: 80  },
         { key: 'employee_name',     header: 'Employee',     width: 110 },
         { key: 'verification_status',header:'Status',       width: 80  },

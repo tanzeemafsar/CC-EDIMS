@@ -11,7 +11,7 @@
 #   3. create the database, app role, and privileges (if missing),
 #   4. write a .env with a freshly generated SESSION_SECRET (if missing),
 #   5. npm install (if node_modules is missing),
-#   6. apply schema.sql and migration-001.sql,
+#   6. apply schema.sql and migration-001 → 004.sql,
 #   7. create the first Admin login (if none exists),
 #   8. tell you how to start the server.
 #
@@ -193,6 +193,30 @@ if [ "$migration_present" = "t" ]; then
 else
   run_super "$DB_NAME" < migration-001.sql >/dev/null
   c_ok "migration-001.sql applied"
+fi
+
+migration2_present="$(echo "SELECT to_regclass('public.procurement_thresholds') IS NOT NULL;" | run_super "$DB_NAME" -t -A 2>/dev/null | tr -d '[:space:]')"
+if [ "$migration2_present" = "t" ]; then
+  c_info "migration-002.sql already applied (skipping)"
+else
+  run_super "$DB_NAME" < migration-002.sql >/dev/null
+  c_ok "migration-002.sql applied"
+fi
+
+migration3_present="$(echo "SELECT to_regclass('public.device_categories') IS NOT NULL;" | run_super "$DB_NAME" -t -A 2>/dev/null | tr -d '[:space:]')"
+if [ "$migration3_present" = "t" ]; then
+  c_info "migration-003.sql already applied (skipping)"
+else
+  run_super "$DB_NAME" < migration-003.sql >/dev/null
+  c_ok "migration-003.sql applied"
+fi
+
+migration4_present="$(echo "SELECT to_regclass('public.vendors') IS NOT NULL;" | run_super "$DB_NAME" -t -A 2>/dev/null | tr -d '[:space:]')"
+if [ "$migration4_present" = "t" ]; then
+  c_info "migration-004.sql already applied (skipping)"
+else
+  run_super "$DB_NAME" < migration-004.sql >/dev/null
+  c_ok "migration-004.sql applied"
 fi
 
 # Grant privileges on everything the schema just created (and for future objects)

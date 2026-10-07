@@ -15,7 +15,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 # Drop root — run as the pre-existing unprivileged 'node' user.
-RUN mkdir -p logs public/images/hardware && chown -R node:node /app
+RUN mkdir -p logs public/images/hardware uploads/receipts && chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
