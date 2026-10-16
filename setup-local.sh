@@ -227,6 +227,14 @@ else
   c_ok "migration-005.sql applied"
 fi
 
+migration6_present="$(echo "SELECT to_regclass('public.password_reset_runs') IS NOT NULL;" | run_super "$DB_NAME" -t -A 2>/dev/null | tr -d '[:space:]')"
+if [ "$migration6_present" = "t" ]; then
+  c_info "migration-006.sql already applied (skipping)"
+else
+  run_super "$DB_NAME" < migration-006.sql >/dev/null
+  c_ok "migration-006.sql applied"
+fi
+
 # Grant privileges on everything the schema just created (and for future objects)
 run_super "$DB_NAME" <<SQL
 GRANT USAGE ON SCHEMA public TO $DB_USER;
