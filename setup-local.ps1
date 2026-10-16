@@ -42,7 +42,7 @@ param(
 
   [string] $AdminUser       = 'admin',
   [string] $AdminEmail      = 'admin@local.test',
-  [string] $AdminPass       = 'adminadminadmin',   # >= 12 chars
+  [string] $AdminPass       = 'ChangeMeLocally1',   # >= 12 chars
 
   [switch] $Reset,
   [switch] $ForceEnv

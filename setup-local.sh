@@ -38,7 +38,7 @@ APP_PORT="${PORT:-3000}"
 
 ADMIN_USER="${EDIMS_ADMIN_USERNAME:-admin}"
 ADMIN_EMAIL="${EDIMS_ADMIN_EMAIL:-admin@local.test}"
-ADMIN_PASS="${EDIMS_ADMIN_PASSWORD:-adminadminadmin123}"   # >= 12 chars
+ADMIN_PASS="${EDIMS_ADMIN_PASSWORD:-ChangeMeLocally1}"   # >= 12 chars
 
 RESET=0
 FORCE_ENV=0
