@@ -93,6 +93,16 @@ pipeline {
                         if curl -fsS "http://127.0.0.1:$APP_PORT/healthz" >/dev/null 2>&1; then
                             echo "EDIMS $TAG is healthy on port $APP_PORT"
                             docker logs "$CONTAINER" 2>&1 | grep -E "\\[(MIGRATE|SERVER|DB)\\]" || true
+                            # Which accounts exist in the database this build points at
+                            docker exec "$CONTAINER" node -e "
+                                const { Client } = require('pg');
+                                const c = new Client({ connectionString: process.env.DATABASE_URL });
+                                c.connect()
+                                 .then(() => c.query(\\"SELECT u.username, r.name AS role, u.is_active, u.failed_login_attempts, u.locked_until > NOW() AS locked FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.created_at\\"))
+                                 .then(({ rows }) => { console.log('Accounts:'); console.table(rows); })
+                                 .catch((e) => console.log('Could not list accounts:', e.message))
+                                 .finally(() => c.end());
+                            " || true
                             exit 0
                         fi
                         sleep 2

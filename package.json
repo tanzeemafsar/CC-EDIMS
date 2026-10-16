@@ -27,6 +27,7 @@
     "db:migrate4": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-004.sql",
     "db:migrate5": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-005.sql",
     "db:migrate6": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-006.sql",
+    "db:migrate7": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f migration-007.sql",
     "gen-cert": "bash scripts/gen-local-cert.sh"
   },
   "dependencies": {
