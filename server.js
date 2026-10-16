@@ -30,6 +30,7 @@ const connectPg     = require('connect-pg-simple');
 const express       = require('express');
 const { sanitizeStr, sanitizeObj, isUUID, isEmail, isDate, parseNumber, makeDb } = require('./lib/helpers');
 const { makeApprovals } = require('./lib/approvals');
+const { runMigrations } = require('./lib/migrate');
 
 // =============================================================================
 // ENVIRONMENT VALIDATION
@@ -1815,6 +1816,19 @@ async function start() {
     } catch (err) {
         console.error('[FATAL] Cannot connect to PostgreSQL:', err.message);
         process.exit(1);
+    }
+
+    // Bring the schema up to date before serving (AUTO_MIGRATE=false to skip)
+    if (process.env.AUTO_MIGRATE !== 'false') {
+        try {
+            const applied = await runMigrations(DATABASE_URL);
+            console.log(applied.length
+                ? `[MIGRATE] ${applied.length} migration(s) applied: ${applied.join(', ')}`
+                : '[MIGRATE] Database is up to date.');
+        } catch (err) {
+            console.error('[FATAL] Migration failed:', err.message);
+            process.exit(1);
+        }
     }
 
     server.listen(PORT, '0.0.0.0', () => {

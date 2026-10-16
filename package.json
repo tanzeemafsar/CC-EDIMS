@@ -19,6 +19,7 @@
     "setup:win": "powershell -ExecutionPolicy Bypass -File setup-local.ps1",
     "seed-admin": "node seed-admin.js",
     "demo:reset": "node manage-demo-user.js",
+    "migrate": "node lib/migrate.js",
     "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
     "db:migrate": "psql \"$DATABASE_URL\" -f migration-001.sql",
     "db:migrate2": "psql \"$DATABASE_URL\" -f migration-002.sql",

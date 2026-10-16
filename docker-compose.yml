@@ -21,14 +21,9 @@ services:
       POSTGRES_USER: edims
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
+      # schema.sql and the migrations are applied by the app on start-up
+      # (lib/migrate.js), so new migrations reach existing volumes too.
       - edims_pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
-      - ./migration-001.sql:/docker-entrypoint-initdb.d/2-migration.sql:ro
-      - ./migration-002.sql:/docker-entrypoint-initdb.d/3-migration.sql:ro
-      - ./migration-003.sql:/docker-entrypoint-initdb.d/4-migration.sql:ro
-      - ./migration-004.sql:/docker-entrypoint-initdb.d/5-migration.sql:ro
-      - ./migration-005.sql:/docker-entrypoint-initdb.d/6-migration.sql:ro
-      - ./migration-006.sql:/docker-entrypoint-initdb.d/7-migration.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U edims -d edims"]
       interval: 10s
