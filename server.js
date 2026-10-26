@@ -342,11 +342,13 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
         // Generic 401 to prevent username enumeration
         if (!user) {
+            console.warn(`[AUTH] Failed login for unknown user ${JSON.stringify(cleanUser)} from ${req.ip}`);
             return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
         // Account lockout check
         if (user.locked_until && new Date(user.locked_until) > new Date()) {
+            console.warn(`[AUTH] Login for locked account "${user.username}" from ${req.ip} (locked until ${new Date(user.locked_until).toISOString()})`);
             return res.status(423).json({ error: 'Account temporarily locked. Try again later.' });
         }
 
@@ -357,7 +359,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
         const valid = await bcrypt.compare(password, user.password_hash);
 
         if (!valid) {
-            const attempts = (user.failed_login_attempts || 0) + 1;
+            // A lockout that has run out starts a fresh count — otherwise the
+            // counter stays at 5+ and a single typo re-locks the account.
+            const lockExpired = user.locked_until && new Date(user.locked_until) <= new Date();
+            const attempts = (lockExpired ? 0 : (user.failed_login_attempts || 0)) + 1;
             const lockUntil = attempts >= 5
                 ? new Date(Date.now() + 30 * 60 * 1000)  // 30-min lockout after 5 failures
                 : null;
@@ -365,6 +370,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
                 `UPDATE users SET failed_login_attempts=$1, locked_until=$2, updated_at=NOW() WHERE id=$3`,
                 [attempts, lockUntil, user.id]
             );
+            console.warn(`[AUTH] Failed login for "${user.username}" from ${req.ip} (attempt ${attempts}/5${lockUntil ? ', account locked for 30 min' : ''})`);
             return res.status(401).json({ error: 'Invalid credentials.' });
         }
 
@@ -1661,6 +1667,26 @@ app.put('/api/users/:id/reset-password', can('users:manage'), async (req, res) =
     } catch (err) {
         console.error('[USERS] Reset password error:', err.message);
         return res.status(500).json({ error: 'Failed to reset password.' });
+    }
+});
+
+// PUT /api/users/:id/unlock
+// Clears a lockout without touching the password.
+app.put('/api/users/:id/unlock', can('users:manage'), async (req, res) => {
+    const { id } = req.params;
+    if (!isUUID(id)) return res.status(400).json({ error: 'Invalid user ID.' });
+    try {
+        const { rows, rowCount } = await query(
+            `UPDATE users SET failed_login_attempts=0, locked_until=NULL, updated_at=NOW()
+             WHERE id=$1 RETURNING id, username`,
+            [id]
+        );
+        if (!rowCount) return res.status(404).json({ error: 'User not found.' });
+        console.log(`[USERS] "${req.session.username}" unlocked "${rows[0].username}"`);
+        return res.json({ user: rows[0] });
+    } catch (err) {
+        console.error('[USERS] Unlock error:', err.message);
+        return res.status(500).json({ error: 'Failed to unlock user.' });
     }
 });
 

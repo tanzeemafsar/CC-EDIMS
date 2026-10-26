@@ -3309,10 +3309,12 @@
     try{
       const d = await get('/api/users');
       setRows(tbl, d.users.map(function(u){
+        const locked = u.locked_until && new Date(u.locked_until) > new Date();
         return '<tr><td>' + esc(u.username) + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td><td>' +
           (u.is_active ? badge('Active') : badge('Inactive')) + '</td><td class="mono">' + fmtDateTime(u.last_login) + '</td><td class="mono">' +
-          esc(u.failed_login_attempts) + '</td><td style="display:flex;gap:6px;">' +
+          esc(u.failed_login_attempts) + (locked ? ' · locked until ' + fmtDateTime(u.locked_until) : '') + '</td><td style="display:flex;gap:6px;">' +
           '<button class="btn" data-toggle-user="' + u.id + '">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' +
+          (u.failed_login_attempts > 0 || locked ? '<button class="btn" data-unlock-user="' + u.id + '" data-unlock-username="' + esc(u.username) + '">Unlock</button>' : '') +
           '<button class="btn" data-reset-user="' + u.id + '" data-reset-username="' + esc(u.username) + '">Reset password</button></td></tr>';
       }), 7, 'No users found.');
     }catch(err){
@@ -3357,6 +3359,16 @@
       try{
         await put('/api/users/' + uid + '/toggle-active');
         toast('User status toggled.', 'ok');
+        loadUsers();
+      }catch(err){ toast(err.message, 'err'); }
+      return;
+    }
+
+    const unlockUid = e.target.getAttribute && e.target.getAttribute('data-unlock-user');
+    if (unlockUid){
+      try{
+        await put('/api/users/' + unlockUid + '/unlock');
+        toast(e.target.getAttribute('data-unlock-username') + ' unlocked.', 'ok');
         loadUsers();
       }catch(err){ toast(err.message, 'err'); }
       return;
