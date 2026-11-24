@@ -437,7 +437,8 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 // GET /api/dashboard/summary
 app.get('/api/dashboard/summary', can('dashboard:read'), async (req, res) => {
     try {
-        const [byClass, totals, alerts, recent, expiring] = await Promise.all([
+        const showApprovals = PERMS['approvals:read'].includes(req.session.role);
+        const [byClass, totals, alerts, recent, expiring, stock, trend, approvals] = await Promise.all([
             query('SELECT * FROM dashboard_inventory_summary', []),
             query(`SELECT
                        COUNT(*)                                               AS total_assets,
@@ -445,7 +446,10 @@ app.get('/api/dashboard/summary', can('dashboard:read'), async (req, res) => {
                        COUNT(*) FILTER (WHERE status = 'In-Hand')            AS total_in_hand,
                        COUNT(*) FILTER (WHERE status = 'Faulty')             AS total_faulty,
                        COUNT(*) FILTER (WHERE status = 'Ordered')            AS total_ordered,
-                       COUNT(*) FILTER (WHERE status = 'Need to Order')      AS total_need_to_order
+                       COUNT(*) FILTER (WHERE status = 'Need to Order')      AS total_need_to_order,
+                       COUNT(*) FILTER (WHERE status = 'Retired')            AS total_retired,
+                       COUNT(*) FILTER (WHERE warranty_expiry BETWEEN NOW() AND NOW() + INTERVAL '90 days'
+                                          AND status <> 'Retired')           AS total_expiring_90d
                    FROM assets`, []),
             query(`SELECT COUNT(*) AS open_alerts FROM procurement_alerts WHERE resolved_at IS NULL`, []),
             query(`SELECT ah.event_type, ah.created_at, ah.notes,
@@ -462,7 +466,24 @@ app.get('/api/dashboard/summary', can('dashboard:read'), async (req, res) => {
                    FROM assets a
                    JOIN device_category_paths cp ON cp.id = a.category_id
                    WHERE a.warranty_expiry BETWEEN NOW() AND NOW() + INTERVAL '90 days'
-                   ORDER BY a.warranty_expiry ASC LIMIT 10`, []),
+                     AND a.status <> 'Retired'
+                   ORDER BY a.warranty_expiry ASC LIMIT 8`, []),
+            // Device types at or below their restock threshold, worst first
+            query(`SELECT pd.category, pd.subcategory, pd.current_stock, pd.threshold_qty,
+                          pd.threshold_status, pd.open_alerts
+                   FROM procurement_dashboard pd
+                   WHERE pd.threshold_status <> 'Normal'
+                   ORDER BY (pd.threshold_status = 'Critical') DESC,
+                            pd.current_stock - pd.threshold_qty, pd.category, pd.subcategory`, []),
+            // Asset events per day for the last 14 days, zero-filled
+            query(`SELECT to_char(d, 'YYYY-MM-DD') AS day, COUNT(ah.id)::int AS events
+                   FROM generate_series(CURRENT_DATE - 13, CURRENT_DATE, INTERVAL '1 day') d
+                   LEFT JOIN asset_history ah
+                          ON ah.created_at >= d AND ah.created_at < d + INTERVAL '1 day'
+                   GROUP BY d ORDER BY d`, []),
+            showApprovals
+                ? query(`SELECT COUNT(*)::int AS pending FROM approval_requests WHERE status = 'Pending'`, [])
+                : null,
         ]);
 
         return res.json({
@@ -471,6 +492,9 @@ app.get('/api/dashboard/summary', can('dashboard:read'), async (req, res) => {
             openAlerts:     parseInt(alerts.rows[0].open_alerts, 10),
             recentActivity: recent.rows,
             expiringWarranties: expiring.rows,
+            lowStock:       stock.rows,
+            activityTrend:  trend.rows,
+            pendingApprovals: approvals ? approvals.rows[0].pending : null,
         });
     } catch (err) {
         console.error('[DASHBOARD] Error:', err.message);

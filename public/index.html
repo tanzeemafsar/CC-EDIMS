@@ -8,48 +8,69 @@
   // Applied synchronously, before the stylesheet paints, so switching themes
   // doesn't flash the wrong palette on reload. The rest of the app's JS
   // (theme toggle button, etc.) lives in the main <script> at the bottom.
-  try {
-    var savedTheme = localStorage.getItem('edims-theme');
-    if (savedTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
-  } catch (e) { /* localStorage unavailable (private mode etc) — default dark theme is fine */ }
+  // Light is the default; dark only when the user picked it.
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem('edims-theme'); }
+  catch (e) { /* localStorage unavailable (private mode etc) — default light theme is fine */ }
+  if (savedTheme !== 'dark') document.documentElement.setAttribute('data-theme', 'light');
 </script>
 <title>EDIMS — Employee Device Inventory Management</title>
 <style>
+  @font-face{ font-family:"Poppins"; font-style:normal; font-weight:400; font-display:swap; src:url(/fonts/poppins-latin-400-normal.woff2) format("woff2"); }
+  @font-face{ font-family:"Poppins"; font-style:normal; font-weight:500; font-display:swap; src:url(/fonts/poppins-latin-500-normal.woff2) format("woff2"); }
+  @font-face{ font-family:"Poppins"; font-style:normal; font-weight:600; font-display:swap; src:url(/fonts/poppins-latin-600-normal.woff2) format("woff2"); }
+  @font-face{ font-family:"Poppins"; font-style:normal; font-weight:700; font-display:swap; src:url(/fonts/poppins-latin-700-normal.woff2) format("woff2"); }
+
+  /* Dark palette — opt-in via the topbar sun/moon button. */
   :root{
-    --bg:        #0b0f19;
-    --panel:     #111827;
-    --panel-2:   #161e2d;
-    --line:      #1f2937;
-    --text:      #e5e9f0;
+    --bg:        #0b1120;
+    --panel:     #111a2e;
+    --panel-2:   #17223a;
+    --line:      #22304a;
+    --text:      #e6eaf2;
     --muted:     #94a3b8;
-    --accent:    #06b6d4;
-    --accent-d:  #0891a8;
-    --assigned:  #10b981;
+    --accent:    #3b82f6;
+    --accent-d:  #2563eb;
+    --accent-rgb: 59,130,246;
+    --assigned:  #22c55e;
     --faulty:    #ef4444;
     --ordered:   #f59e0b;
     --danger:    #ef4444;
     --err-text:  #fca5a5;
-    --radius:    6px;
+    --rail-bg:   #0f172a;
+    --topbar-bg: #0e1628;
+    --head-line: #475569;
+    --input-line:#2c3a55;
+    --card-line: #1c2840;
+    --shadow:    0 4px 24px rgba(0,0,0,.35);
+    --radius:    8px;
+    --radius-lg: 18px;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --sans: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  /* Light theme — toggled via data-theme="light" on <html>, see the topbar
-     sun/moon button. Same variable names throughout the stylesheet, so
-     nothing else needs to change to support both palettes. */
+  /* Light palette — the default (set on <html> by the inline script above).
+     Same variable names throughout the stylesheet, so nothing else needs to
+     change to support both palettes. */
   html[data-theme="light"]{
-    --bg:        #f6f7fb;
+    --bg:        #f5f7fa;
     --panel:     #ffffff;
-    --panel-2:   #eef1f6;
-    --line:      #dde2ea;
-    --text:      #111827;
-    --muted:     #5b6472;
-    --accent:    #0891a8;
-    --accent-d:  #06b6d4;
-    --assigned:  #059669;
+    --panel-2:   #f2f4f8;
+    --line:      #e8ebf0;
+    --text:      #141824;
+    --muted:     #6b7280;
+    --accent:    #0b6cf2;
+    --accent-d:  #0958c9;
+    --accent-rgb: 11,108,242;
+    --assigned:  #16a34a;
     --faulty:    #dc2626;
     --ordered:   #b45309;
     --danger:    #dc2626;
     --err-text:  #b91c1c;
+    --topbar-bg: #f8f9fb;
+    --head-line: #1f2937;
+    --input-line:#d5dae3;
+    --card-line: #eef0f4;
+    --shadow:    0 4px 24px rgba(15,23,42,.06);
   }
   *{ box-sizing:border-box; }
   html,body{ margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family:var(--sans); }
@@ -345,6 +366,196 @@
   .skeleton{ color:var(--muted); font-family:var(--mono); font-size:12.5px; padding:20px; text-align:center; }
   .skeleton.error{ color:var(--err-text); }
 
+  /* ---------- Dashboard ----------
+     Chart colours, one per asset status, validated together for colour-blind
+     separation on both panel surfaces. Kept apart from --assigned/--faulty
+     etc., which are text colours. */
+  :root{
+    --c-assigned: #199e70;
+    --c-inhand:   #3987e5;
+    --c-ordered:  #c98500;
+    --c-need:     #9085e9;
+    --c-faulty:   #e66767;
+    --c-trend:    #3987e5;
+    --track:      rgba(148,163,184,.12);
+    --card-glow:  rgba(6,182,212,.07);
+  }
+  html[data-theme="light"]{
+    --c-assigned: #1baf7a;
+    --c-inhand:   #2a78d6;
+    --c-ordered:  #eda100;
+    --c-need:     #6250d6;
+    --c-faulty:   #e34948;
+    --c-trend:    #2a78d6;
+    --track:      rgba(100,116,139,.12);
+    --card-glow:  rgba(8,145,168,.06);
+  }
+  .dash-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .dash-head h2{ margin:0; font-size:20px; font-weight:650; letter-spacing:-.01em; }
+  .dash-sub{ color:var(--muted); font-size:12.5px; margin-top:3px; }
+  .dash-head-actions{ display:flex; align-items:center; gap:10px; }
+  .dash-updated{ color:var(--muted); font-size:11.5px; font-family:var(--mono); }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(176px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi{
+    position:relative; text-align:left; font:inherit; color:inherit; cursor:pointer;
+    background:linear-gradient(180deg, var(--card-glow), transparent 70%), var(--panel);
+    border:1px solid var(--line); border-radius:10px; padding:14px 16px 13px;
+    display:flex; flex-direction:column; gap:8px; min-height:118px;
+    transition:border-color .15s, transform .15s, box-shadow .15s;
+  }
+  .kpi:hover{ border-color:rgba(6,182,212,.45); transform:translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .kpi-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .kpi-label{ color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+  .kpi-icon{
+    width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    background:var(--panel-2); color:var(--muted); flex:none;
+  }
+  .kpi-icon svg{ width:15px; height:15px; }
+  .kpi-value{ font-family:var(--mono); font-size:28px; font-weight:600; line-height:1; letter-spacing:-.02em; }
+  .kpi-value small{ font-size:15px; color:var(--muted); font-weight:500; margin-left:2px; }
+  .kpi-foot{ color:var(--muted); font-size:12px; margin-top:auto; }
+  .kpi-foot b{ color:var(--text); font-weight:600; }
+  .kpi.tone-good .kpi-icon{ color:var(--assigned); background:rgba(16,185,129,.12); }
+  .kpi.tone-accent .kpi-icon{ color:var(--accent); background:rgba(6,182,212,.12); }
+  .kpi.tone-warn .kpi-icon{ color:var(--ordered); background:rgba(245,158,11,.12); }
+  .kpi.tone-bad .kpi-icon{ color:var(--faulty); background:rgba(239,68,68,.12); }
+  .kpi.tone-bad.is-hot{ border-color:rgba(239,68,68,.35); }
+  .kpi.tone-warn.is-hot{ border-color:rgba(245,158,11,.35); }
+  .meter{ height:6px; border-radius:4px; background:var(--track); overflow:hidden; }
+  .meter > span{ display:block; height:100%; border-radius:4px; background:var(--c-assigned); }
+
+  .dash-grid{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-bottom:16px; }
+  .dash-grid > .panel{ margin-bottom:0; display:flex; flex-direction:column; min-width:0; }
+  .dash-grid .span-2{ grid-column:span 2; }
+  .dash-grid .span-3{ grid-column:span 3; }
+  #view-dashboard .panel{ border-radius:10px; }
+  #view-dashboard .panel-head{ padding:14px 18px; }
+  #view-dashboard .panel-head h3{ font-size:13.5px; font-weight:600; }
+  .panel-sub{ color:var(--muted); font-size:12px; font-weight:400; margin-top:2px; }
+  #view-dashboard .panel-body{ padding:16px 18px 18px; flex:1; }
+  .panel-link{ background:none; border:none; padding:0; cursor:pointer; color:var(--accent); font:inherit; font-size:12px; white-space:nowrap; }
+  .panel-link:hover{ text-decoration:underline; }
+
+  .seg-toggle{ display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg-toggle button{ background:transparent; border:none; color:var(--muted); font:inherit; font-size:11.5px; padding:4px 10px; cursor:pointer; }
+  .seg-toggle button + button{ border-left:1px solid var(--line); }
+  .seg-toggle button.on{ background:var(--panel-2); color:var(--text); }
+
+  /* Status share: one segmented bar + legend */
+  .statusbar{ display:flex; gap:2px; height:18px; margin:4px 0 20px; }
+  .statusbar > span{ min-width:3px; height:100%; }
+  .statusbar > span:first-child{ border-radius:4px 0 0 4px; }
+  .statusbar > span:last-child{ border-radius:0 4px 4px 0; }
+  .statusbar > span:only-child{ border-radius:4px; }
+  .statusbar.empty{ background:var(--track); border-radius:4px; }
+  .sw-assigned{ background:var(--c-assigned); }
+  .sw-inhand{ background:var(--c-inhand); }
+  .sw-ordered{ background:var(--c-ordered); }
+  .sw-need{ background:var(--c-need); }
+  .sw-faulty{ background:var(--c-faulty); }
+  .sw-retired{ background:repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 5px); opacity:.55; }
+  .status-legend{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .status-legend .li{
+    display:flex; flex-direction:column; gap:8px; padding:12px 14px; border-radius:8px;
+    background:var(--panel-2); border:1px solid var(--line); cursor:pointer; text-align:left; font:inherit; color:inherit;
+    transition:border-color .15s;
+  }
+  .status-legend .li:hover{ border-color:rgba(6,182,212,.45); }
+  .status-legend .li-top{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+  .status-legend .sw{ width:10px; height:10px; border-radius:3px; flex:none; }
+  .status-legend .li-num{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .status-legend .ct{ font-family:var(--mono); font-weight:600; font-size:20px; line-height:1; }
+  .status-legend .pc{ font-family:var(--mono); color:var(--muted); font-size:12px; }
+
+  /* Inventory by device type: horizontal stacked bars */
+  .hbars{ display:flex; flex-direction:column; gap:10px; }
+  .hbar-row{ display:grid; grid-template-columns:minmax(110px,32%) 1fr 44px; align-items:center; gap:12px; font-size:12.5px; }
+  .hbar-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hbar-name .cat{ color:var(--muted); }
+  .hbar-track{ display:flex; gap:2px; height:12px; }
+  .hbar-track > span{ height:100%; min-width:2px; }
+  .hbar-track > span:first-child{ border-radius:4px 0 0 4px; }
+  .hbar-track > span:last-child{ border-radius:0 4px 4px 0; }
+  .hbar-track > span:only-child{ border-radius:4px; }
+  .hbar-track.zero{ background:var(--track); border-radius:4px; }
+  .hbar-total{ font-family:var(--mono); text-align:right; color:var(--text); }
+  .chart-legend{ display:flex; flex-wrap:wrap; gap:6px 16px; margin-bottom:14px; font-size:12px; color:var(--muted); }
+  .chart-legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .chart-legend i{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+  /* Lists: stock health, warranties, activity feed */
+  .dlist{ display:flex; flex-direction:column; }
+  .dlist-item{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:12.5px; }
+  .dlist-item:first-child{ padding-top:0; }
+  .dlist-item:last-child{ border-bottom:none; padding-bottom:0; }
+  .dlist-main{ flex:1; min-width:0; }
+  .dlist-title{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dlist-meta{ color:var(--muted); font-size:11.5px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dlist-item .meter{ margin-top:6px; }
+  .pill{
+    display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
+    padding:2px 8px; border-radius:10px; white-space:nowrap; font-family:var(--mono);
+    background:var(--panel-2); color:var(--muted);
+  }
+  .pill svg{ width:11px; height:11px; }
+  .pill.crit{ background:rgba(239,68,68,.13); color:var(--faulty); }
+  .pill.warn{ background:rgba(245,158,11,.13); color:var(--ordered); }
+  .dash-empty{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; color:var(--muted); font-size:12.5px; padding:22px 8px; height:100%; }
+  .dash-empty svg{ width:22px; height:22px; color:var(--assigned); }
+
+  /* Activity: 14-day column chart + feed */
+  .activity-wrap{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:26px; }
+  .cols{ position:relative; display:flex; align-items:flex-end; gap:4px; height:200px; padding-top:8px; border-bottom:1px solid var(--line); }
+  .cols .gridline{ position:absolute; left:0; right:0; border-top:1px dashed var(--line); pointer-events:none; }
+  .cols .gridline em{ position:absolute; right:0; top:-15px; font-style:normal; font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+  .col{ flex:1; height:100%; display:flex; align-items:flex-end; cursor:default; position:relative; z-index:1; }
+  .col > span{ display:block; width:100%; border-radius:4px 4px 0 0; background:var(--c-trend); min-height:0; transition:opacity .12s; }
+  .col.zero > span{ height:2px !important; background:var(--track); border-radius:1px; }
+  .cols:hover .col > span{ opacity:.55; }
+  .cols .col:hover > span, .cols .col:focus > span{ opacity:1; }
+  .col-axis{ display:flex; gap:4px; margin-top:6px; }
+  .col-axis span{ flex:1; min-width:0; overflow:visible; text-align:center; font-size:10.5px; color:var(--muted); font-family:var(--mono); white-space:nowrap; }
+  .col-axis span:last-child{ text-align:right; }
+  .trend-total{ display:flex; align-items:baseline; gap:8px; margin-bottom:12px; }
+  .trend-total b{ font-family:var(--mono); font-size:22px; font-weight:600; }
+  .trend-total span{ color:var(--muted); font-size:12px; }
+  .feed-dot{ width:8px; height:8px; border-radius:50%; flex:none; background:var(--muted); box-shadow:0 0 0 3px var(--panel); }
+  .feed-dot.d-assigned{ background:var(--c-assigned); }
+  .feed-dot.d-inhand{ background:var(--c-inhand); }
+  .feed-dot.d-faulty{ background:var(--c-faulty); }
+  .feed-dot.d-ordered{ background:var(--c-ordered); }
+  .feed-dot.d-new{ background:var(--accent); }
+  .feed-time{ color:var(--muted); font-size:11px; font-family:var(--mono); white-space:nowrap; }
+
+  .viz-tip{
+    position:fixed; z-index:200; pointer-events:none; display:none;
+    background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px;
+    padding:7px 10px; font-size:12px; line-height:1.45; box-shadow:0 8px 24px rgba(0,0,0,.3); max-width:260px;
+  }
+  .viz-tip b{ font-weight:600; }
+  .viz-tip .muted{ color:var(--muted); }
+
+  @media (max-width:1100px){
+    .dash-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .dash-grid .span-2, .dash-grid .span-3{ grid-column:span 2; }
+  }
+  @media (max-width:720px){
+    .dash-grid{ grid-template-columns:minmax(0,1fr); }
+    .status-legend{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .hbar-row{ grid-template-columns:minmax(0,38%) minmax(0,1fr) 34px; gap:8px; }
+    .dash-grid .span-2, .dash-grid .span-3{ grid-column:auto; }
+    .activity-wrap{ grid-template-columns:minmax(0,1fr); }
+    .kpi-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .kpi{ min-height:0; padding:12px; }
+    .panel-sub{ display:none; }
+    .kpi-value{ font-size:24px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .kpi{ transition:none; }
+    .kpi:hover{ transform:none; }
+  }
   @media (prefers-reduced-motion: reduce){
     .rail .brand-dot, .login-card .dot, .toast{ animation:none !important; }
   }
@@ -357,43 +568,351 @@
     .content{ padding:16px; }
     .who span.uname{ display:none; }
   }
+
+  /* =====================================================================
+     CLOUDCARD LOOK
+     Navy icon rail, light top bar with breadcrumb, white rounded cards with
+     soft shadows, pill buttons, Poppins type. Applied on top of the base
+     rules above so every view picks it up.
+     ===================================================================== */
+  body{ font-size:13.5px; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:rgba(var(--accent-rgb),.25); color:inherit; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+  /* Rail */
+  .rail{ width:76px; background:var(--rail-bg); border-right:none; padding:14px 0 18px; gap:5px; overflow-y:auto; scrollbar-width:none; }
+  .rail::-webkit-scrollbar{ display:none; }
+  .rail .spacer{ min-height:8px; }
+  .rail-logo{ width:40px; height:40px; margin-bottom:22px; flex:none; display:flex; align-items:center; justify-content:center; }
+  .rail-logo svg{ width:40px; height:40px; display:block; }
+  .rail button{
+    width:48px; height:48px; min-height:48px; flex:none; padding:0; gap:0; border-radius:14px;
+    color:#c7cfdb; border:1.5px solid transparent; transition:background .15s, color .15s, border-color .15s;
+  }
+  .rail button .nav-icon{ width:21px; height:21px; }
+  .rail button .rail-label{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+  .rail button:hover{ background:rgba(255,255,255,.07); color:#fff; }
+  .rail button.active{ background:#0a1020; border-color:#2f6bff; color:#4d8dff; box-shadow:0 0 0 3px rgba(47,107,255,.14); }
+  .rail button.logout{ color:#f87171; }
+  .rail button.logout:hover{ background:rgba(248,113,113,.12); }
+
+  /* Top bar */
+  .topbar{
+    height:62px; background:var(--topbar-bg); border-bottom:none; padding:0 26px;
+    box-shadow:0 2px 12px rgba(15,23,42,.06); position:relative; z-index:5;
+  }
+  .topbar .title-block{ align-items:center; gap:8px; }
+  .crumb-root{ color:var(--accent); font-size:14px; font-weight:500; }
+  .crumb-sep{ color:var(--muted); display:inline-flex; }
+  .crumb-sep svg{ width:14px; height:14px; }
+  .topbar h1{ font-size:14.5px; font-weight:500; letter-spacing:0; }
+  .who{ gap:12px; font-size:13px; }
+  .who .uname{ color:var(--text); font-weight:600; }
+  .who .role{
+    font-family:var(--sans); font-size:11px; font-weight:500; padding:3px 10px; border-radius:999px;
+    background:rgba(var(--accent-rgb),.1); color:var(--accent); border:none;
+  }
+  .avatar{
+    width:32px; height:32px; border-radius:50%; background:#0f172a; color:#fff; flex:none;
+    display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; text-transform:uppercase;
+  }
+  html:not([data-theme="light"]) .avatar{ background:var(--accent); }
+  .icon-btn{ width:36px; height:36px; border-radius:50%; }
+  .icon-btn:hover{ background:var(--panel-2); }
+  .bell-panel{ border-radius:14px; border-color:var(--card-line); box-shadow:0 16px 40px rgba(15,23,42,.14); }
+  .bell-count{ background:var(--faulty); }
+
+  /* Content + footer */
+  .content{ padding:26px 30px 18px; display:flex; flex-direction:column; }
+  .content > .view.active{ flex:0 0 auto; }
+  .app-foot{ margin-top:auto; padding-top:28px; text-align:right; font-size:11.5px; color:var(--muted); }
+  .app-foot b{ color:var(--accent); font-weight:500; text-decoration:underline; text-underline-offset:2px; }
+
+  /* Cards */
+  .panel{ background:var(--panel); border:1px solid var(--card-line); border-radius:var(--radius-lg); box-shadow:var(--shadow); margin-bottom:22px; }
+  .panel-head{ padding:18px 22px; border-bottom:1px solid var(--line); }
+  .panel-head h3{ font-size:15px; font-weight:600; letter-spacing:0; }
+  .panel-body{ padding:18px 22px; }
+  .panel > .tbl-wrap{ padding:4px 22px 8px; }
+  .stat{ border:1px solid var(--card-line); border-radius:16px; box-shadow:var(--shadow); }
+
+  /* Buttons — pills */
+  .btn{
+    border:1px solid var(--text); background:var(--panel); color:var(--text);
+    padding:9px 22px; border-radius:999px; font-size:13px; font-weight:500; line-height:1.4;
+    transition:background .15s, color .15s, border-color .15s, box-shadow .15s;
+  }
+  .btn:hover{ filter:none; background:var(--panel-2); }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .btn-primary:hover{ filter:none; background:var(--accent-d); border-color:var(--accent-d); box-shadow:0 6px 16px rgba(var(--accent-rgb),.28); }
+  .btn-danger{ background:transparent; border-color:var(--faulty); color:var(--faulty); }
+  .btn-danger:hover{ background:rgba(239,68,68,.08); }
+  .btn:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(var(--accent-rgb),.3); }
+  td .btn, .row-actions .btn, .row-actions button, .empty .btn, .lines-tbl .btn{
+    padding:4px 11px; font-size:11.5px; border-color:var(--input-line);
+  }
+  .row-actions, td[style*="display:flex"]{ gap:5px !important; }
+  td .btn-primary, .row-actions .btn-primary{ border-color:var(--accent); }
+  td .btn-danger, .row-actions .btn-danger{ border-color:rgba(220,38,38,.5); }
+
+  /* Fields */
+  .field{ margin-bottom:16px; }
+  .field label{ font-size:12.5px; font-weight:500; color:var(--text); text-transform:none; letter-spacing:0; margin-bottom:7px; }
+  .field input, .field select, .field textarea, .lines-tbl input, .lines-tbl select{
+    background:var(--panel); border:1px solid var(--input-line); color:var(--text);
+    padding:11px 14px; border-radius:8px; font-size:13.5px; transition:border-color .15s, box-shadow .15s;
+  }
+  .lines-tbl input, .lines-tbl select{ padding:8px 10px; }
+  .field input::placeholder, .field textarea::placeholder{ color:#9aa3b2; }
+  .field input:focus, .field select:focus, .field textarea:focus, .lines-tbl input:focus, .lines-tbl select:focus{
+    outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(var(--accent-rgb),.14);
+  }
+  *:focus-visible{ outline-color:var(--accent); }
+
+  /* Toolbars become a card, like the CloudCard search panel */
+  .view > .toolbar{
+    background:var(--panel); border:1px solid var(--card-line); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:18px 22px; gap:12px; margin-bottom:22px; align-items:flex-end;
+  }
+  .view > .toolbar .btn{ padding:10px 22px; }
+
+  /* Tables */
+  table{ font-size:13.5px; }
+  th{
+    color:var(--text); font-weight:600; font-size:13px; text-transform:none; letter-spacing:0;
+    padding:16px 12px 12px; border-bottom:1.5px solid var(--head-line);
+  }
+  td{ padding:13px 12px; border-bottom:1px solid var(--line); }
+  tbody tr{ transition:background .12s; }
+  tbody tr:hover{ background:rgba(var(--accent-rgb),.035); }
+  .mono{ font-family:var(--sans); font-variant-numeric:tabular-nums; font-size:13px; }
+
+  /* Status pills */
+  .badge{ padding:4px 12px; border-radius:999px; font-size:12px; font-weight:500; letter-spacing:0; }
+  html[data-theme="light"] .badge-Assigned, html[data-theme="light"] .badge-Active,
+  html[data-theme="light"] .badge-Verified, html[data-theme="light"] .badge-Approved,
+  html[data-theme="light"] .badge-Paid{ background:#e8f8ee; color:#16a34a; }
+  html[data-theme="light"] .badge-Faulty, html[data-theme="light"] .badge-Discrepancy,
+  html[data-theme="light"] .badge-Rejected, html[data-theme="light"] .badge-Failed,
+  html[data-theme="light"] .badge-Void, html[data-theme="light"] .badge-Offboarded{ background:#fdecec; color:#dc2626; }
+  html[data-theme="light"] .badge-Ordered, html[data-theme="light"] .badge-Pending{ background:#fff4e0; color:#b45309; }
+  html[data-theme="light"] .badge-InHand, html[data-theme="light"] .badge-In-Hand{ background:#e9f1fe; color:#0b6cf2; }
+  .badge-Issued{ background:rgba(var(--accent-rgb),.12); color:var(--accent); }
+  .badge-Critical, .badge-Open{ background:rgba(239,68,68,.12); color:var(--faulty); }
+  .badge-Warning{ background:rgba(245,158,11,.14); color:var(--ordered); }
+  .badge-Normal, .badge-Resolved{ background:rgba(34,197,94,.12); color:var(--assigned); }
+  html[data-theme="light"] .badge-Critical, html[data-theme="light"] .badge-Open{ background:#fdecec; color:#dc2626; }
+  html[data-theme="light"] .badge-Warning{ background:#fff4e0; color:#b45309; }
+  html[data-theme="light"] .badge-Normal, html[data-theme="light"] .badge-Resolved{ background:#e8f8ee; color:#16a34a; }
+
+  /* Inputs placed directly in table cells and toolbars outside a .field */
+  td input:not([type="checkbox"]):not([type="radio"]), td select, .toolbar > input, .toolbar input[type="date"]{
+    background:var(--panel); border:1px solid var(--input-line); color:var(--text); font-family:inherit;
+    padding:6px 10px; border-radius:8px; font-size:13px;
+  }
+  td input:focus, td select:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(var(--accent-rgb),.14); }
+
+  /* Pagination — centred text links */
+  .pager{ justify-content:center; gap:18px; padding:16px 22px 18px; border-top:none; }
+  .pager span{ font-family:var(--sans); font-size:12.5px; }
+  .pager .btn{ border:none; background:none; color:var(--accent); padding:4px 6px; border-radius:6px; font-size:14px; font-weight:500; }
+  .pager .btn:hover{ background:none; text-decoration:underline; }
+  .pager .btn:disabled{ color:var(--muted); text-decoration:none; }
+
+  /* Modal */
+  .modal-backdrop{ background:rgba(15,23,42,.45); backdrop-filter:blur(2px); }
+  .modal{ border:none; border-radius:var(--radius-lg); box-shadow:0 24px 70px rgba(15,23,42,.25); }
+  .modal-head{ padding:18px 24px; }
+  .modal-head h3{ font-size:16px; font-weight:600; }
+  .modal-body{ padding:22px 24px; }
+  .modal-foot{ padding:16px 24px; gap:10px; }
+  .modal-close{ width:32px; height:32px; border-radius:50%; font-size:20px; }
+  .modal-close:hover{ background:var(--panel-2); }
+
+  /* Toasts */
+  .toast{ background:var(--panel); border:1px solid var(--card-line); border-left:4px solid var(--accent); border-radius:12px; box-shadow:0 12px 32px rgba(15,23,42,.16); font-size:13px; }
+
+  /* Misc */
+  .section-title{ font-size:12px; font-weight:600; letter-spacing:.06em; }
+  .approval-note{ border-radius:12px; }
+  .hint{ font-size:12px; }
+  a.link{ color:var(--accent); }
+  .skeleton{ font-family:var(--sans); }
+  .thumb{ border-radius:8px; border:1px solid var(--line); }
+
+  /* Dashboard tuned to the same card language */
+  .dash-head h2{ font-size:21px; font-weight:600; }
+  .kpi{ background:var(--panel); border:1px solid var(--card-line); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:16px 18px 15px; }
+  .kpi:hover{ border-color:rgba(var(--accent-rgb),.4); box-shadow:0 10px 28px rgba(15,23,42,.10); }
+  .kpi.tone-accent .kpi-icon{ color:var(--accent); background:rgba(var(--accent-rgb),.1); }
+  .kpi-icon{ width:32px; height:32px; border-radius:10px; }
+  .kpi-label{ font-weight:500; letter-spacing:.04em; }
+  .kpi-value, .status-legend .ct, .trend-total b, .hbar-total{ font-family:var(--sans); font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .kpi-value{ font-size:30px; font-weight:600; }
+  .dash-updated, .feed-time, .pill, .col-axis span, .cols .gridline em, .status-legend .pc{ font-family:var(--sans); }
+  .status-legend .li{ border-radius:12px; background:var(--panel); border-color:var(--line); }
+  .status-legend .li:hover{ border-color:rgba(var(--accent-rgb),.45); }
+  .seg-toggle{ border-radius:999px; border-color:var(--input-line); }
+  .seg-toggle button{ padding:5px 14px; font-size:12px; }
+  .seg-toggle button.on{ background:var(--accent); color:#fff; }
+  .panel-link{ font-weight:500; }
+
+  /* Login — split illustration + form, soft wave background */
+  #login-screen{ background:var(--bg); overflow:auto; flex-direction:column; }
+  html[data-theme="light"] #login-screen{ background:#ffffff; }
+  .login-bg{ position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .login-bg svg{ width:100%; height:100%; display:block; }
+  .login-wrap{
+    position:relative; flex:1; width:min(1180px, 100%); margin:0 auto; padding:40px 32px;
+    display:grid; grid-template-columns:1.15fr .85fr; align-items:center; gap:56px;
+  }
+  .login-art svg{ width:100%; max-width:600px; height:auto; display:block; margin:0 auto; }
+  .login-card{ width:min(340px, 100%); background:none; border:none; box-shadow:none; padding:0; justify-self:start; }
+  .login-card .logo{ gap:10px; margin-bottom:6px; }
+  .login-card .logo svg{ width:44px; height:44px; flex:none; }
+  .login-card h2{ font-size:28px; font-weight:600; letter-spacing:-.01em; }
+  .login-card .sub{ font-family:var(--sans); font-size:12.5px; margin:0 0 30px 54px; }
+  .login-card .field{ margin-bottom:14px; }
+  .login-card .field input{ padding:14px 16px; border-radius:10px; }
+  .login-card .btn-primary{ padding:13px 22px; margin-top:10px; font-size:14px; }
+  .login-card .err{ border-radius:10px; }
+  .login-help{ margin-top:26px; font-size:13.5px; color:var(--text); }
+  .login-help span{ color:var(--muted); }
+  .login-foot{ position:relative; text-align:center; font-size:12px; color:var(--muted); padding:0 16px 22px; }
+  #boot-splash .boot-mark{ font-family:var(--sans); }
+  #boot-splash .boot-mark svg{ width:34px; height:34px; }
+  #boot-splash .boot-sub{ font-family:var(--sans); }
+
+  @media (max-width:900px){
+    .login-wrap{ grid-template-columns:1fr; gap:28px; padding:28px 20px; }
+    .login-art{ order:2; }
+    .login-art svg{ max-width:420px; }
+    .login-card{ justify-self:center; }
+  }
+  @media (max-width:760px){
+    .rail{ width:58px; }
+    .rail-logo{ width:34px; height:34px; margin-bottom:14px; }
+    .rail-logo svg{ width:34px; height:34px; }
+    .rail button{ width:42px; height:42px; min-height:42px; border-radius:12px; }
+    .topbar{ padding:0 14px; }
+    .crumb-root, .crumb-sep{ display:none; }
+    .who .role{ display:none; }
+    .content{ padding:16px; }
+    .view > .toolbar{ padding:14px; }
+    .panel > .tbl-wrap{ padding:2px 12px 6px; }
+    .panel-head{ padding:14px 16px; }
+  }
+  #view-dashboard .panel{ border-radius:var(--radius-lg); }
+
+  /* Expandable rail */
+  .rail{ transition:width .2s ease; flex-shrink:0; }
+  .rail-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex:none; }
+  .rail-head .rail-logo{ margin-bottom:0; }
+  .rail-brand{ display:none; color:#fff; font-size:17px; font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+  .rail .rail-toggle{ margin-bottom:10px; color:#8b96a8; }
+  .rail .rail-toggle:hover{ color:#fff; }
+  .rail.expanded{ width:232px; align-items:stretch; padding-left:14px; padding-right:14px; }
+  .rail.expanded .rail-head{ padding:0 6px; }
+  .rail.expanded .rail-brand{ display:inline; }
+  .rail.expanded button{ width:100%; height:46px; min-height:46px; flex-direction:row; justify-content:flex-start; gap:14px; padding:0 14px; border-radius:12px; }
+  .rail.expanded button .rail-label{
+    position:static; width:auto; height:auto; clip:auto; overflow:hidden; display:inline !important;
+    font-size:13.5px; font-weight:500; letter-spacing:0; text-transform:none; line-height:1.2; text-overflow:ellipsis;
+  }
+  .rail.expanded .bell-count{ position:static !important; margin-left:auto; }
+  .rail-scrim{ display:none; }
+  @media (max-width:760px){
+    .rail.expanded{ position:fixed; top:0; bottom:0; left:0; z-index:60; width:240px; box-shadow:8px 0 32px rgba(15,23,42,.35); }
+    .rail.expanded ~ .rail-scrim{ display:block; position:fixed; inset:0; z-index:55; background:rgba(15,23,42,.4); }
+    #app.rail-open .main{ margin-left:58px; }
+  }
+  @media (prefers-reduced-motion: reduce){ .rail{ transition:none; } }
 </style>
 </head>
 <body>
 
 <!-- ============================== BOOT SPLASH ============================== -->
 <div id="boot-splash">
-  <div class="boot-mark"><span class="dot"></span>EDIMS</div>
+  <div class="boot-mark"><svg class="logo-mark" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg-boot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5aa2ff"/><stop offset="1" stop-color="#0b6cf2"/></linearGradient></defs><path d="M33 10.7A16 16 0 1 0 33 29.3" fill="none" stroke="url(#lg-boot)" stroke-width="5" stroke-linecap="round"/><rect x="14" y="14.2" width="12" height="8.3" rx="1.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12.3 25.8h15.4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>EDIMS</div>
   <div class="boot-sub">Checking session…</div>
 </div>
 
 <!-- ============================== LOGIN ============================== -->
 <div id="login-screen">
-  <div class="login-card">
-    <div class="logo"><span class="dot"></span><h2>EDIMS</h2></div>
-    <div class="sub">Employee Device Inventory Management</div>
-    <div class="err" id="login-err"></div>
-    <form id="login-form">
-      <div class="field">
-        <label for="login-username">Username</label>
-        <input id="login-username" name="username" autocomplete="username" required>
-      </div>
-      <div class="field">
-        <label for="login-password">Password</label>
-        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit" id="login-submit">Sign in</button>
-    </form>
+  <div class="login-bg" aria-hidden="true">
+    <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+      <path d="M0 0h1440v640c-120 40-260 60-420 20-220-56-300-330-560-390C300 230 120 250 0 200z" fill="var(--panel-2)" opacity=".75"/>
+      <path d="M0 0h560c-60 60-160 110-300 120C150 128 60 110 0 90z" fill="var(--panel-2)"/>
+      <path d="M92 80a46 46 0 0 0 62 70" fill="none" stroke="#f6d48f" stroke-width="22" stroke-linecap="round" opacity=".45"/>
+      <path d="M1300 700a50 50 0 0 0-30 84" fill="none" stroke="#f6d48f" stroke-width="24" stroke-linecap="round" opacity=".45"/>
+      <path d="M380 34a14 14 0 0 0 18 20" fill="none" stroke="#7fd1c7" stroke-width="7" stroke-linecap="round" opacity=".6"/>
+      <path d="M400 820a14 14 0 0 0 6 22" fill="none" stroke="#7fb0f5" stroke-width="7" stroke-linecap="round" opacity=".6"/>
+      <path d="M408 740a20 20 0 0 1 4 34" fill="none" stroke="#d8dde6" stroke-width="10" stroke-linecap="round"/>
+    </svg>
   </div>
+  <div class="login-wrap">
+    <div class="login-art" aria-hidden="true">
+      <svg viewBox="0 0 600 440">
+        <path d="M76 22h50M76 22v48" stroke="#4d8dff" stroke-width="4" stroke-linecap="round"/>
+        <rect x="104" y="44" width="360" height="250" rx="18" fill="#e9edf3"/>
+        <g stroke="#cfd6e0" stroke-width="2"><path d="M140 76v150M190 76v150M240 76v150M290 76v150M340 76v150"/></g>
+        <path d="M140 150c25-40 50-40 75 0s50 40 75 0 50-40 75-10" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round"/>
+        <path d="M140 150c25 40 50 40 75 0s50-40 75 0 50 40 75 10" fill="none" stroke="#fb923c" stroke-width="5" stroke-linecap="round"/>
+        <path d="M215 150c25-45 55-50 80-15s45 40 70 15" fill="none" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" opacity=".85"/>
+        <g stroke="#7fb0f5" stroke-width="6" stroke-linecap="round"><path d="M388 92h48M388 108h48M388 124h30M388 140h40"/></g>
+        <rect x="60" y="214" width="236" height="190" rx="16" fill="#f4f6fa" stroke="#e3e8ef"/>
+        <rect x="84" y="240" width="118" height="20" rx="6" fill="#60a5fa"/>
+        <rect x="84" y="270" width="118" height="20" rx="6" fill="#3b82f6"/>
+        <g stroke="#60a5fa" stroke-width="7" stroke-linecap="round"><path d="M220 248h46M220 264h46M220 280h46"/></g>
+        <circle cx="236" cy="350" r="30" fill="none" stroke="#e3e8ef" stroke-width="12"/>
+        <path d="M236 320a30 30 0 1 1-29 38" fill="none" stroke="#3b82f6" stroke-width="12" stroke-linecap="round"/>
+        <rect x="84" y="312" width="96" height="62" rx="6" fill="#ffffff" stroke="#cfd6e0" stroke-width="3"/>
+        <rect x="92" y="320" width="34" height="46" rx="2" fill="#e9edf3"/><rect x="132" y="320" width="40" height="46" rx="2" fill="#dbe4f0"/>
+        <path d="M120 374v14h-16M144 374v14h16" stroke="#cfd6e0" stroke-width="4" stroke-linecap="round" fill="none"/>
+        <rect x="328" y="204" width="168" height="186" rx="16" fill="#ffffff" stroke="#e3e8ef"/>
+        <rect x="350" y="224" width="124" height="80" rx="10" fill="none" stroke="#7fb0f5" stroke-width="3"/>
+        <rect x="364" y="238" width="96" height="52" rx="4" fill="#e9f1fe"/>
+        <path d="M340 316h144l-12 18H352z" fill="#cfd6e0"/>
+        <g stroke="#e3e8ef" stroke-width="8" stroke-linecap="round"><path d="M352 354h100M352 372h70"/></g>
+        <rect x="506" y="250" width="56" height="100" rx="12" fill="#1f2a44"/>
+        <rect x="512" y="262" width="44" height="74" rx="4" fill="#60a5fa"/>
+        <circle cx="534" cy="343" r="3" fill="#cfd6e0"/>
+        <rect x="474" y="372" width="96" height="50" rx="10" fill="#ffffff" stroke="#e3e8ef"/>
+        <circle cx="498" cy="397" r="11" fill="#e8f8ee"/><path d="m492 397 4 4 8-8" stroke="#16a34a" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <g stroke="#e3e8ef" stroke-width="6" stroke-linecap="round"><path d="M518 390h36M518 404h24"/></g>
+      </svg>
+    </div>
+    <div class="login-card">
+      <div class="logo"><svg class="logo-mark" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg-login" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5aa2ff"/><stop offset="1" stop-color="#0b6cf2"/></linearGradient></defs><path d="M33 10.7A16 16 0 1 0 33 29.3" fill="none" stroke="url(#lg-login)" stroke-width="5" stroke-linecap="round"/><rect x="14" y="14.2" width="12" height="8.3" rx="1.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12.3 25.8h15.4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg><h2>EDIMS</h2></div>
+      <div class="sub">Employee Device Inventory Management</div>
+      <div class="err" id="login-err"></div>
+      <form id="login-form">
+        <div class="field">
+          <label for="login-username" class="sr-only">Username</label>
+          <input id="login-username" name="username" placeholder="Username" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="login-password" class="sr-only">Password</label>
+          <input id="login-password" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="login-submit">Login</button>
+      </form>
+      <div class="login-help">Trouble signing in? <span>Contact your administrator.</span></div>
+    </div>
+  </div>
+  <div class="login-foot">©Copyright <span data-year></span>, CloudCard Inc. All Rights Reserved.</div>
 </div>
 
 <!-- ============================== APP SHELL ============================== -->
 <div id="app">
   <nav class="rail" id="rail">
-    <div class="brand-dot" title="Session active"></div>
+    <div class="rail-head" title="EDIMS"><div class="rail-logo" style="color:#fff"><svg class="logo-mark" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="lg-rail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5aa2ff"/><stop offset="1" stop-color="#0b6cf2"/></linearGradient></defs><path d="M33 10.7A16 16 0 1 0 33 29.3" fill="none" stroke="url(#lg-rail)" stroke-width="5" stroke-linecap="round"/><rect x="14" y="14.2" width="12" height="8.3" rx="1.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12.3 25.8h15.4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div><span class="rail-brand">EDIMS</span></div>
+    <button class="rail-toggle" id="rail-toggle" type="button" title="Expand menu" aria-label="Expand menu" aria-expanded="false" aria-controls="rail">
+      <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h13M3.5 10h13M3.5 15h13"/></svg>
+      <span class="rail-label">Collapse menu</span></button>
     <button data-view="dashboard" class="active" title="Dashboard">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9.5 10 3l7 6.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8.5V17h10V8.5" stroke-linejoin="round"/></svg>
-      <span class="rail-label">Home</span></button>
+      <span class="rail-label">Dashboard</span></button>
     <button data-view="assets" data-perm="assets:read" title="Assets">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6l7-3.5Z" stroke-linejoin="round"/><path d="M3 6l7 3.5L17 6M10 9.5V17.5" stroke-linejoin="round"/></svg>
       <span class="rail-label">Assets</span></button>
@@ -402,13 +921,13 @@
       <span class="rail-label">Catalogue</span></button>
     <button data-view="employees" data-perm="employees:read" title="Employees">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="6.5" r="3"/><path d="M3.5 17c1-3.5 4-5 6.5-5s5.5 1.5 6.5 5" stroke-linecap="round"/></svg>
-      <span class="rail-label">People</span></button>
+      <span class="rail-label">Employees</span></button>
     <button data-view="assignments" data-perm="assets:read" title="Assignments">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h11m0 0-3-3m3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 13H5m0 0 3 3m-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="rail-label">Assign</span></button>
+      <span class="rail-label">Assignments</span></button>
     <button data-view="procurement" data-perm="procurement:read" title="Procurement">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4h2l1.6 9.2a1.5 1.5 0 0 0 1.5 1.3h6.4a1.5 1.5 0 0 0 1.5-1.2L17 7H6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="17" r="1"/><circle cx="14.5" cy="17" r="1"/></svg>
-      <span class="rail-label">Orders</span></button>
+      <span class="rail-label">Procurement</span></button>
     <button data-view="approvals" data-perm="approvals:read" title="Approvals">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="3" width="13" height="14.5" rx="2"/><path d="M7 3V2h6v1M7 10.5l2 2 4-4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="rail-label">Approvals</span><span class="bell-count" id="nav-approvals-count" style="display:none;position:absolute;top:4px;right:6px;">0</span></button>
@@ -420,13 +939,13 @@
       <span class="rail-label">Audits</span></button>
     <button data-view="hardware" data-perm="assets:read" title="Hardware scraper">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3v9m0 0-3-3m3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="rail-label">Scraper</span></button>
+      <span class="rail-label">Hardware scraper</span></button>
     <button data-view="categories" data-perm="categories:manage" title="Device categories">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="5.5" height="4" rx="1"/><rect x="11.5" y="8" width="5.5" height="4" rx="1"/><rect x="11.5" y="13" width="5.5" height="4" rx="1"/><path d="M5.75 7v8h5.75M5.75 10h5.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="rail-label">Types</span></button>
+      <span class="rail-label">Device types</span></button>
     <button data-view="reference" data-perm="assets:read" title="Reference data: vendors &amp; departments">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="10" cy="5" rx="6" ry="2.3"/><path d="M4 5v10c0 1.3 2.7 2.3 6 2.3s6-1 6-2.3V5M4 10c0 1.3 2.7 2.3 6 2.3s6-1 6-2.3" /></svg>
-      <span class="rail-label">Reference</span></button>
+      <span class="rail-label">Reference data</span></button>
     <button data-view="users" data-perm="users:manage" title="Users">
       <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="6" r="2.4"/><circle cx="14" cy="7.5" r="2"/><path d="M2.5 16c.7-2.8 2.4-4.2 4.5-4.2s3.8 1.4 4.5 4.2M12.7 16c.5-2 1.7-3.2 3.3-3.2s2.8 1.2 3.3 3.2" stroke-linecap="round"/></svg>
       <span class="rail-label">Users</span></button>
@@ -436,11 +955,13 @@
       <span class="rail-label">Sign out</span></button>
   </nav>
 
+  <div class="rail-scrim" id="rail-scrim"></div>
   <div class="main">
     <div class="topbar">
       <div class="title-block">
+        <span class="crumb-root">EDIMS</span>
+        <span class="crumb-sep" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         <h1 id="view-title">Dashboard</h1>
-        <span class="crumb" id="view-crumb">/api/dashboard/summary</span>
       </div>
       <div class="who">
         <button class="icon-btn" id="theme-toggle" title="Switch theme" aria-label="Switch theme">
@@ -458,6 +979,7 @@
             <button class="btn btn-block" id="bell-view-all">View procurement</button>
           </div>
         </div>
+        <span class="avatar" id="who-avatar" aria-hidden="true">—</span>
         <span class="uname" id="who-name">—</span>
         <span class="role" id="who-role">—</span>
       </div>
@@ -467,21 +989,69 @@
 
       <!-- ---------- DASHBOARD ---------- -->
       <section class="view active" id="view-dashboard">
-        <div class="stat-grid" id="dash-stats"></div>
-        <div class="grid-2">
-          <div class="panel">
-            <div class="panel-head"><h3>Inventory by device type</h3></div>
-            <div class="tbl-wrap"><table id="dash-byclass"><thead></thead><tbody></tbody></table></div>
+        <div class="dash-head">
+          <div>
+            <h2 id="dash-greeting">Fleet overview</h2>
+            <div class="dash-sub" id="dash-sub">Device inventory at a glance</div>
           </div>
-          <div class="panel">
-            <div class="panel-head"><h3>Warranties expiring (90 days)</h3></div>
-            <div class="tbl-wrap"><table id="dash-expiring"><thead></thead><tbody></tbody></table></div>
+          <div class="dash-head-actions">
+            <span class="dash-updated" id="dash-updated"></span>
+            <button class="btn" id="dash-refresh-btn">Refresh</button>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h3>Recent activity</h3></div>
-          <div class="tbl-wrap"><table id="dash-recent"><thead></thead><tbody></tbody></table></div>
+
+        <div class="kpi-grid" id="dash-kpis"><div class="skeleton">Loading dashboard…</div></div>
+
+        <div class="dash-grid">
+          <div class="panel span-2">
+            <div class="panel-head">
+              <div><h3>Fleet status</h3><div class="panel-sub">Share of every device by current status</div></div>
+              <button class="panel-link" data-dash-go="assets">View assets →</button>
+            </div>
+            <div class="panel-body" id="dash-status"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <div><h3>Stock health</h3><div class="panel-sub">In-hand stock against restock thresholds</div></div>
+              <button class="panel-link" data-dash-go="procurement">Procurement →</button>
+            </div>
+            <div class="panel-body" id="dash-stock"></div>
+          </div>
         </div>
+
+        <div class="dash-grid">
+          <div class="panel span-2">
+            <div class="panel-head">
+              <div><h3>Inventory by device type</h3><div class="panel-sub">Devices per type, split by status</div></div>
+              <div class="seg-toggle" role="group" aria-label="Display as">
+                <button class="on" data-bytype-mode="chart">Chart</button><button data-bytype-mode="table">Table</button>
+              </div>
+            </div>
+            <div class="panel-body" id="dash-bytype"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <div><h3>Warranties expiring</h3><div class="panel-sub" id="dash-warranty-sub">Next 90 days</div></div>
+            </div>
+            <div class="panel-body" id="dash-expiring"></div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="panel span-3">
+            <div class="panel-head">
+              <div><h3>Activity</h3><div class="panel-sub">Asset events over the last 14 days and the latest changes</div></div>
+              <button class="panel-link" data-dash-go="assignments">Assignments →</button>
+            </div>
+            <div class="panel-body">
+              <div class="activity-wrap">
+                <div id="dash-trend"></div>
+                <div id="dash-recent"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="viz-tip" id="viz-tip" role="tooltip"></div>
       </section>
 
       <!-- ---------- ASSETS ---------- -->
@@ -735,6 +1305,8 @@
         </div>
       </section>
 
+      <footer class="app-foot">© <span data-year></span> <b>CloudCard Inc.</b></footer>
+
     </div>
   </div>
 </div>
@@ -776,6 +1348,34 @@
      own server, not a Claude-authored chat artifact, so localStorage is the
      right tool here (unlike in-conversation artifacts, which can't use it).
      ========================================================================= */
+  document.querySelectorAll('[data-year]').forEach(function(el){ el.textContent = new Date().getFullYear(); });
+
+  /* =========================================================================
+     EXPANDABLE RAIL — remembered per browser; on phones it overlays the page
+     and closes again after picking a view.
+     ========================================================================= */
+  const rail = document.getElementById('rail');
+  const railToggle = document.getElementById('rail-toggle');
+  const railMobile = window.matchMedia('(max-width:760px)');
+  function setRailExpanded(on, remember){
+    rail.classList.toggle('expanded', on);
+    document.getElementById('app').classList.toggle('rail-open', on && railMobile.matches);
+    railToggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+    railToggle.title = on ? 'Collapse menu' : 'Expand menu';
+    railToggle.setAttribute('aria-label', railToggle.title);
+    if (remember){ try{ localStorage.setItem('edims-rail', on ? 'expanded' : 'collapsed'); }catch(e){} }
+  }
+  let railSaved = null;
+  try{ railSaved = localStorage.getItem('edims-rail'); }catch(e){}
+  setRailExpanded(railSaved === 'expanded' && !railMobile.matches, false);
+  railToggle.addEventListener('click', function(){
+    setRailExpanded(!rail.classList.contains('expanded'), !railMobile.matches);
+  });
+  document.getElementById('rail-scrim').addEventListener('click', function(){ setRailExpanded(false, false); });
+  rail.addEventListener('click', function(e){
+    if (railMobile.matches && e.target.closest('button[data-view]')) setRailExpanded(false, false);
+  });
+
   const themeToggleBtn = document.getElementById('theme-toggle');
   const themeIconDark  = document.getElementById('theme-icon-dark');
   const themeIconLight = document.getElementById('theme-icon-light');
@@ -1009,7 +1609,6 @@
       b.classList.toggle('active', b.getAttribute('data-view') === name);
     });
     document.getElementById('view-title').textContent = meta.title;
-    document.getElementById('view-crumb').textContent = meta.crumb;
 
     // Reflect the view in the URL hash so it's deep-linkable and survives
     // a refresh; guard against re-triggering our own hashchange listener.
@@ -1275,6 +1874,7 @@
     loginScreen.classList.remove('show');
     appShell.classList.add('show');
     document.getElementById('who-name').textContent = session.username;
+    document.getElementById('who-avatar').textContent = String(session.username || '?').charAt(0);
     document.getElementById('who-role').textContent = session.role;
     applyPermissionVisibility();
     loadApprovalRules();
@@ -1375,55 +1975,325 @@
   /* =========================================================================
      DASHBOARD
      ========================================================================= */
+  // Status order is fixed — chart colours follow the status, never its rank.
+  const DASH_STATUSES = [
+    { key:'assigned',      label:'Assigned',      sw:'sw-assigned', filter:'Assigned' },
+    { key:'in_hand',       label:'In-hand',       sw:'sw-inhand',   filter:'In-Hand' },
+    { key:'ordered',       label:'Ordered',       sw:'sw-ordered',  filter:'Ordered' },
+    { key:'need_to_order', label:'Need to order', sw:'sw-need',     filter:'Need to Order' },
+    { key:'faulty',        label:'Faulty',        sw:'sw-faulty',   filter:'Faulty' },
+  ];
+  const DASH_ICONS = {
+    box:   '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 6.5 10 3l7 3.5v7L10 17l-7-3.5z"/><path d="M3 6.5 10 10l7-3.5M10 10v7"/></svg>',
+    users: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.8-2.8 2.9-4.2 5.5-4.2s4.7 1.4 5.5 4.2"/><path d="M13.5 4.2a3 3 0 0 1 0 5.6M15 12.6c1.3.6 2.1 1.9 2.5 3.9"/></svg>',
+    stack: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M10 3 3 6.5 10 10l7-3.5z"/><path d="m3 10 7 3.5 7-3.5M3 13.5 10 17l7-3.5"/></svg>',
+    wrench:'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 3.2a4 4 0 0 0-4.8 5.3L3.3 13a1.8 1.8 0 0 0 2.6 2.6l4.5-4.4a4 4 0 0 0 5.3-4.8l-2.4 2.4-2.2-.6-.6-2.2z"/></svg>',
+    truck: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M2.5 5h9v8h-9zM11.5 8h3.2l2.8 2.8V13h-6"/><circle cx="6" cy="14.5" r="1.5"/><circle cx="14.5" cy="14.5" r="1.5"/></svg>',
+    bell:  '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 1.5 5.5h-13S5 12 5 8z"/><path d="M8.5 16.5a1.6 1.6 0 0 0 3 0"/></svg>',
+    check: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="m6.8 10.2 2.2 2.2 4.2-4.6"/></svg>',
+    alert: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 2 17h16z"/><path d="M10 8v4M10 14.5v.01"/></svg>',
+    clock: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2"/></svg>',
+  };
+  let dashByTypeMode = 'chart';
+  let dashLastData = null;
+
+  function num(v){ const n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+  function fmtNum(n){ return Number(n).toLocaleString('en-GB'); }
+  function pct(part, whole){ return whole ? Math.round(part / whole * 100) : 0; }
+  function daysUntil(v){
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || '');
+    if (!m) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    return Math.round((new Date(+m[1], +m[2] - 1, +m[3]) - today) / 86400000);
+  }
+  function timeAgo(v){
+    const s = Math.max(0, (Date.now() - new Date(v).getTime()) / 1000);
+    if (isNaN(s)) return '—';
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    if (s < 7 * 86400) return Math.floor(s / 86400) + 'd ago';
+    return fmtDate(String(v).slice(0, 10));
+  }
+  function feedTone(ev){
+    const e = String(ev || '').toLowerCase();
+    if (e.indexOf('faulty') >= 0) return 'd-faulty';
+    if (e.indexOf('return') >= 0 || e.indexOf('repair') >= 0) return 'd-inhand';
+    if (e.indexOf('assign') >= 0) return 'd-assigned';
+    if (e.indexOf('order') >= 0 || e.indexOf('invoice') >= 0) return 'd-ordered';
+    if (e.indexOf('register') >= 0) return 'd-new';
+    return '';
+  }
+  function tipAttr(html){ return ' data-tip="' + esc(html) + '" tabindex="0"'; }
+
+  function kpiHtml(k){
+    return '<button class="kpi tone-' + k.tone + (k.hot ? ' is-hot' : '') + '" data-dash-go="' + k.go + '"' +
+      (k.filter ? ' data-dash-filter="' + esc(k.filter) + '"' : '') + '>' +
+      '<div class="kpi-top"><span class="kpi-label">' + esc(k.label) + '</span><span class="kpi-icon">' + DASH_ICONS[k.icon] + '</span></div>' +
+      '<div class="kpi-value">' + k.value + '</div>' +
+      (k.meter != null ? '<div class="meter" aria-hidden="true"><span style="width:' + k.meter + '%"></span></div>' : '') +
+      '<div class="kpi-foot">' + k.foot + '</div></button>';
+  }
+
+  function renderDashKpis(d){
+    const t = d.totals || {};
+    const total = num(t.total_assets), retired = num(t.total_retired), active = total - retired;
+    const assigned = num(t.total_assigned), inHand = num(t.total_in_hand), faulty = num(t.total_faulty);
+    const ordered = num(t.total_ordered), needOrder = num(t.total_need_to_order);
+    const util = pct(assigned, active);
+    const critical = (d.lowStock || []).filter(function(s){ return s.threshold_status === 'Critical'; }).length;
+    const kpis = [
+      { label:'Active devices', icon:'box', tone:'accent', go:'assets', value:fmtNum(active),
+        foot: retired ? '<b>' + fmtNum(retired) + '</b> retired · ' + fmtNum(total) + ' all-time' : 'No retired devices' },
+      { label:'Utilisation', icon:'users', tone:'good', go:'assets', filter:'Assigned', value:util + '<small>%</small>', meter:util,
+        foot:'<b>' + fmtNum(assigned) + '</b> of ' + fmtNum(active) + ' assigned' },
+      { label:'Available stock', icon:'stack', tone: critical ? 'warn' : 'accent', hot: critical > 0, go:'assets', filter:'In-Hand', value:fmtNum(inHand),
+        foot: critical ? '<b>' + critical + '</b> type' + (critical === 1 ? '' : 's') + ' below threshold' : 'All types above threshold' },
+      { label:'Faulty', icon:'wrench', tone:'bad', hot: faulty > 0, go:'assets', filter:'Faulty', value:fmtNum(faulty),
+        foot: active ? '<b>' + pct(faulty, active) + '%</b> of active devices' : '—' },
+      { label:'In the pipeline', icon:'truck', tone:'warn', go:'procurement', value:fmtNum(ordered + needOrder),
+        foot:'<b>' + fmtNum(ordered) + '</b> ordered · <b>' + fmtNum(needOrder) + '</b> to order' },
+    ];
+    if (d.pendingApprovals != null){
+      kpis.push({ label:'Needs action', icon:'bell', tone:'warn', hot: d.pendingApprovals + d.openAlerts > 0, go:'approvals',
+        value:fmtNum(d.pendingApprovals), foot:'approval' + (d.pendingApprovals === 1 ? '' : 's') + ' pending · <b>' + fmtNum(d.openAlerts) + '</b> open alert' + (d.openAlerts === 1 ? '' : 's') });
+    } else {
+      kpis.push({ label:'Open alerts', icon:'bell', tone:'warn', hot: d.openAlerts > 0, go:'procurement',
+        value:fmtNum(d.openAlerts), foot:'procurement alerts unresolved' });
+    }
+    document.getElementById('dash-kpis').innerHTML = kpis.map(kpiHtml).join('');
+  }
+
+  function renderDashStatus(d){
+    const t = d.totals || {};
+    const total = num(t.total_assets);
+    const parts = DASH_STATUSES.map(function(s){ return { s:s, n:num(t['total_' + s.key]) }; });
+    parts.push({ s:{ label:'Retired', sw:'sw-retired', filter:'Retired' }, n:num(t.total_retired) });
+    const bar = total
+      ? '<div class="statusbar" role="img" aria-label="Fleet status share">' + parts.filter(function(p){ return p.n > 0; }).map(function(p){
+          return '<span class="' + p.s.sw + '" style="flex:' + p.n + '"' +
+            tipAttr('<b>' + esc(p.s.label) + '</b><br>' + fmtNum(p.n) + ' devices · ' + pct(p.n, total) + '%') + '></span>';
+        }).join('') + '</div>'
+      : '<div class="statusbar empty"></div>';
+    const legend = '<div class="status-legend">' + parts.map(function(p){
+      return '<button class="li" data-dash-go="assets" data-dash-filter="' + esc(p.s.filter) + '">' +
+        '<span class="li-top"><span class="sw ' + p.s.sw + '"></span>' + esc(p.s.label) + '</span>' +
+        '<span class="li-num"><span class="ct">' + fmtNum(p.n) + '</span><span class="pc">' + pct(p.n, total) + '%</span></span></button>';
+    }).join('') + '</div>';
+    document.getElementById('dash-status').innerHTML = bar + legend;
+  }
+
+  function renderDashByType(d){
+    const wrap = document.getElementById('dash-bytype');
+    const rows = (d.byClass || []).slice().sort(function(a, b){
+      return (num(b.total) - num(b.retired)) - (num(a.total) - num(a.retired));
+    });
+    if (!rows.length){ wrap.innerHTML = '<div class="dash-empty">No device types yet.</div>'; return; }
+
+    if (dashByTypeMode === 'table'){
+      wrap.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Device type</th><th>Total</th>' +
+        DASH_STATUSES.map(function(s){ return '<th>' + esc(s.label) + '</th>'; }).join('') + '<th>Retired</th></tr></thead><tbody>' +
+        rows.map(function(r){
+          return '<tr><td>' + esc(catLabel(r)) + '</td><td class="mono">' + esc(r.total) + '</td>' +
+            DASH_STATUSES.map(function(s){ return '<td class="mono">' + esc(r[s.key]) + '</td>'; }).join('') +
+            '<td class="mono">' + esc(r.retired) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      return;
+    }
+
+    const max = Math.max.apply(null, rows.map(function(r){ return num(r.total) - num(r.retired); }).concat([1]));
+    const legend = '<div class="chart-legend">' + DASH_STATUSES.map(function(s){
+      return '<span><i class="' + s.sw + '"></i>' + esc(s.label) + '</span>';
+    }).join('') + '</div>';
+    wrap.innerHTML = legend + '<div class="hbars">' + rows.map(function(r){
+      const active = num(r.total) - num(r.retired);
+      const segs = DASH_STATUSES.filter(function(s){ return num(r[s.key]) > 0; });
+      const tip = '<b>' + esc(catLabel(r)) + '</b><br>' + DASH_STATUSES.map(function(s){
+        return esc(s.label) + ': ' + fmtNum(num(r[s.key]));
+      }).join('<br>') + (num(r.retired) ? '<br><span class="muted">Retired: ' + fmtNum(num(r.retired)) + '</span>' : '');
+      const track = active
+        ? '<div style="width:' + (active / max * 100) + '%" class="hbar-track">' + segs.map(function(s){
+            return '<span class="' + s.sw + '" style="flex:' + num(r[s.key]) + '"></span>';
+          }).join('') + '</div>'
+        : '<div class="hbar-track zero" style="width:100%"></div>';
+      return '<div class="hbar-row"' + tipAttr(tip) + '>' +
+        '<div class="hbar-name" title="' + esc(catLabel(r)) + '"><span class="cat">' + esc(r.category) + ' › </span>' + esc(r.subcategory) + '</div>' +
+        '<div>' + track + '</div><div class="hbar-total">' + fmtNum(active) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function renderDashStock(d){
+    const wrap = document.getElementById('dash-stock');
+    const rows = d.lowStock || [];
+    if (!rows.length){
+      wrap.innerHTML = '<div class="dash-empty">' + DASH_ICONS.check + 'Every device type is above its restock threshold.</div>';
+      return;
+    }
+    const shown = rows.slice(0, 6);
+    wrap.innerHTML = '<div class="dlist">' + shown.map(function(r){
+      const cur = num(r.current_stock), thr = num(r.threshold_qty);
+      const crit = r.threshold_status === 'Critical';
+      const fill = thr ? Math.min(100, cur / thr * 100) : 100;
+      return '<div class="dlist-item"><div class="dlist-main">' +
+        '<div class="dlist-title">' + esc(r.subcategory) + ' <span style="color:var(--muted)">· ' + esc(r.category) + '</span></div>' +
+        '<div class="dlist-meta">' + fmtNum(cur) + ' in hand · threshold ' + fmtNum(thr) +
+          (num(r.open_alerts) ? ' · ' + num(r.open_alerts) + ' open alert' + (num(r.open_alerts) === 1 ? '' : 's') : '') + '</div>' +
+        '<div class="meter"><span style="width:' + fill + '%;background:var(' + (crit ? '--c-faulty' : '--c-ordered') + ')"></span></div>' +
+        '</div><span class="pill ' + (crit ? 'crit' : 'warn') + '">' + (crit ? DASH_ICONS.alert + 'Critical' : DASH_ICONS.clock + 'At threshold') + '</span></div>';
+    }).join('') + '</div>' +
+      (rows.length > shown.length ? '<div class="dlist-meta" style="margin-top:10px;">+' + (rows.length - shown.length) + ' more in Procurement</div>' : '');
+  }
+
+  function renderDashExpiring(d){
+    const wrap = document.getElementById('dash-expiring');
+    const rows = d.expiringWarranties || [];
+    const total = num((d.totals || {}).total_expiring_90d);
+    document.getElementById('dash-warranty-sub').textContent =
+      total ? fmtNum(total) + ' device' + (total === 1 ? '' : 's') + ' in the next 90 days' : 'Next 90 days';
+    if (!rows.length){
+      wrap.innerHTML = '<div class="dash-empty">' + DASH_ICONS.check + 'No warranties expire in the next 90 days.</div>';
+      return;
+    }
+    wrap.innerHTML = '<div class="dlist">' + rows.map(function(r){
+      const days = daysUntil(r.warranty_expiry);
+      const cls = days != null && days <= 30 ? 'crit' : days != null && days <= 60 ? 'warn' : '';
+      const label = days == null ? '—' : days === 0 ? 'today' : days + 'd';
+      return '<div class="dlist-item"><div class="dlist-main">' +
+        '<div class="dlist-title"><span class="mono">' + esc(r.asset_tag) + '</span> · ' + esc(r.model) + '</div>' +
+        '<div class="dlist-meta">' + esc(catLabel(r)) + ' · ' + fmtDate(r.warranty_expiry) + '</div>' +
+        '</div><span class="pill ' + cls + '">' + (cls === 'crit' ? DASH_ICONS.alert : DASH_ICONS.clock) + esc(label) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  function renderDashActivity(d){
+    const trend = d.activityTrend || [];
+    const sum = trend.reduce(function(a, r){ return a + num(r.events); }, 0);
+    const peak = Math.max.apply(null, trend.map(function(r){ return num(r.events); }).concat([0]));
+    // Round the axis top up to a tidy number so the gridline label reads cleanly
+    const step = peak <= 5 ? 1 : peak <= 20 ? 5 : peak <= 50 ? 10 : Math.pow(10, Math.floor(Math.log10(peak)));
+    const top = Math.max(2 * step, Math.ceil(peak / (2 * step)) * 2 * step);
+    const dayName = function(iso){
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+      return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    };
+    const cols = trend.map(function(r){
+      const n = num(r.events), dt = dayName(r.day);
+      const when = dt ? dt.toLocaleDateString('en-GB', { weekday:'short', day:'2-digit', month:'short' }) : esc(r.day);
+      return '<div class="col' + (n ? '' : ' zero') + '"' + tipAttr('<b>' + when + '</b><br>' + fmtNum(n) + ' event' + (n === 1 ? '' : 's')) + '>' +
+        '<span style="height:' + (n / top * 100) + '%"></span></div>';
+    }).join('');
+    const axis = trend.map(function(r, i){
+      const dt = dayName(r.day);
+      const show = (trend.length - 1 - i) % 3 === 0;
+      return '<span>' + (show && dt ? dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) : '') + '</span>';
+    }).join('');
+    document.getElementById('dash-trend').innerHTML =
+      '<div class="trend-total"><b>' + fmtNum(sum) + '</b><span>events in 14 days · busiest day ' + fmtNum(peak) + '</span></div>' +
+      '<div class="cols" role="img" aria-label="Asset events per day, last 14 days">' +
+        '<div class="gridline" style="top:8px"><em>' + top + '</em></div>' +
+        '<div class="gridline" style="top:calc(8px + (100% - 8px) / 2)"><em>' + (top / 2) + '</em></div>' +
+        cols + '</div><div class="col-axis">' + axis + '</div>';
+
+    const recent = (d.recentActivity || []).slice(0, 7);
+    document.getElementById('dash-recent').innerHTML = recent.length
+      ? '<div class="dlist">' + recent.map(function(r){
+          const who = r.employee_name ? ' → ' + esc(r.employee_name) : '';
+          return '<div class="dlist-item"><span class="feed-dot ' + feedTone(r.event_type) + '"></span><div class="dlist-main">' +
+            '<div class="dlist-title">' + esc(r.event_type) + ' · <span class="mono">' + esc(r.asset_tag || '—') + '</span>' + who + '</div>' +
+            '<div class="dlist-meta">' + (r.performed_by ? 'by ' + esc(r.performed_by) : 'System') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>' +
+            '</div><span class="feed-time" title="' + esc(fmtDateTime(r.created_at)) + '">' + esc(timeAgo(r.created_at)) + '</span></div>';
+        }).join('') + '</div>'
+      : '<div class="dash-empty">No activity recorded yet.</div>';
+  }
+
+  function renderDashHeader(){
+    const h = new Date().getHours();
+    const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    document.getElementById('dash-greeting').textContent = session && session.username ? part + ', ' + session.username : 'Fleet overview';
+    document.getElementById('dash-sub').textContent = 'Device inventory overview · ' +
+      new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    document.getElementById('dash-updated').textContent = 'Updated ' +
+      new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  }
+
   loaders.dashboard = async function(silent){
-    const statsWrap = document.getElementById('dash-stats');
-    if (!silent) statsWrap.innerHTML = '<div class="skeleton">Loading dashboard…</div>';
+    const kpiWrap = document.getElementById('dash-kpis');
+    if (!silent && !dashLastData) kpiWrap.innerHTML = '<div class="skeleton">Loading dashboard…</div>';
     try{
       const d = await get('/api/dashboard/summary');
-      const t = d.totals || {};
-      statsWrap.innerHTML = [
-        ['Total assets', t.total_assets, ''],
-        ['Assigned', t.total_assigned, 'assigned'],
-        ['In-hand', t.total_in_hand, ''],
-        ['Faulty', t.total_faulty, 'faulty'],
-        ['Ordered', t.total_ordered, 'ordered'],
-        ['Need to order', t.total_need_to_order, 'ordered'],
-        ['Open procurement alerts', d.openAlerts, 'accent'],
-      ].map(function(s){
-        return '<div class="stat ' + s[2] + '"><div class="v">' + esc(s[1] == null ? '0' : s[1]) + '</div><div class="l">' + esc(s[0]) + '</div></div>';
-      }).join('');
-
-      const byClassTbl = document.getElementById('dash-byclass');
-      setHead(byClassTbl, ['Device Type','Total','Assigned','In-hand','Faulty','Ordered','Need order','Retired']);
-      setRows(byClassTbl, (d.byClass || []).map(function(r){
-        return '<tr><td>' + esc(catLabel(r)) + '</td><td class="mono">' + esc(r.total) + '</td><td class="mono">' + esc(r.assigned) +
-          '</td><td class="mono">' + esc(r.in_hand) + '</td><td class="mono">' + esc(r.faulty) + '</td><td class="mono">' + esc(r.ordered) +
-          '</td><td class="mono">' + esc(r.need_to_order) + '</td><td class="mono">' + esc(r.retired) + '</td></tr>';
-      }), 8, 'No inventory data yet.');
-
-      const expTbl = document.getElementById('dash-expiring');
-      setHead(expTbl, ['Asset tag','Device Type','Model','Warranty expiry']);
-      setRows(expTbl, (d.expiringWarranties || []).map(function(r){
-        return '<tr><td class="mono">' + esc(r.asset_tag) + '</td><td>' + esc(catLabel(r)) + '</td><td>' + esc(r.model) +
-          '</td><td>' + fmtDate(r.warranty_expiry) + '</td></tr>';
-      }), 4, 'Nothing expiring in the next 90 days.');
-
-      const recentTbl = document.getElementById('dash-recent');
-      setHead(recentTbl, ['When','Event','Asset','Employee','Operator','Notes']);
-      setRows(recentTbl, (d.recentActivity || []).map(function(r){
-        return '<tr><td class="mono">' + fmtDateTime(r.created_at) + '</td><td>' + esc(r.event_type) + '</td><td class="mono">' +
-          esc(r.asset_tag) + '</td><td>' + esc(r.employee_name || '—') + '</td><td>' + esc(r.performed_by || '—') +
-          '</td><td>' + esc(r.notes || '—') + '</td></tr>';
-      }), 6, 'No recent activity.');
+      dashLastData = d;
+      renderDashHeader();
+      renderDashKpis(d);
+      renderDashStatus(d);
+      renderDashStock(d);
+      renderDashByType(d);
+      renderDashExpiring(d);
+      renderDashActivity(d);
     }catch(err){
       if (silent) return; // background refresh — keep showing last-good data, don't interrupt
-      statsWrap.innerHTML = '<div class="skeleton error">Could not load dashboard — ' + esc(err.message) +
+      kpiWrap.innerHTML = '<div class="skeleton error">Could not load dashboard — ' + esc(err.message) +
         '<br><button class="btn" id="dash-retry-btn" style="margin-top:10px;">Retry</button></div>';
       const retryBtn = document.getElementById('dash-retry-btn');
-      if (retryBtn) retryBtn.addEventListener('click', loaders.dashboard);
+      if (retryBtn) retryBtn.addEventListener('click', function(){ loaders.dashboard(); });
       toast(err.message, 'err');
     }
   };
+
+  document.getElementById('dash-refresh-btn').addEventListener('click', function(){ loaders.dashboard(); });
+
+  document.getElementById('view-dashboard').addEventListener('click', function(e){
+    const mode = e.target.closest('[data-bytype-mode]');
+    if (mode){
+      dashByTypeMode = mode.getAttribute('data-bytype-mode');
+      document.querySelectorAll('[data-bytype-mode]').forEach(function(b){ b.classList.toggle('on', b === mode); });
+      if (dashLastData) renderDashByType(dashLastData);
+      return;
+    }
+    const go = e.target.closest('[data-dash-go]');
+    if (go){
+      const view = go.getAttribute('data-dash-go');
+      if (view === 'assets'){
+        document.getElementById('assets-status').value = go.getAttribute('data-dash-filter') || '';
+        document.getElementById('assets-search').value = '';
+        assetsOffset = 0;
+      }
+      showView(view);
+    }
+  });
+
+  // One shared tooltip for every dashboard mark (hover and keyboard focus)
+  (function(){
+    const tip = document.getElementById('viz-tip');
+    const root = document.getElementById('view-dashboard');
+    function place(x, y){
+      const r = tip.getBoundingClientRect();
+      let left = x + 14, top = y + 14;
+      if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+      if (top + r.height > window.innerHeight - 8) top = y - r.height - 14;
+      tip.style.left = Math.max(8, left) + 'px';
+      tip.style.top = Math.max(8, top) + 'px';
+    }
+    function show(el, x, y){
+      tip.innerHTML = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+      place(x, y);
+    }
+    function hide(){ tip.style.display = 'none'; }
+    root.addEventListener('mousemove', function(e){
+      const el = e.target.closest('[data-tip]');
+      if (!el){ hide(); return; }
+      show(el, e.clientX, e.clientY);
+    });
+    root.addEventListener('mouseleave', hide);
+    root.addEventListener('focusin', function(e){
+      const el = e.target.closest('[data-tip]');
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      show(el, r.left + r.width / 2, r.top);
+    });
+    root.addEventListener('focusout', hide);
+    document.getElementById('content').addEventListener('scroll', hide, { passive:true });
+  })();
 
   /* =========================================================================
      ASSETS
@@ -1963,7 +2833,6 @@
     try{
       const d = await get('/api/procurement');
       setRows(dashTbl, d.dashboard.map(function(r){
-        const tCls = r.threshold_status === 'Critical' ? 'faulty' : (r.threshold_status === 'Warning' ? 'ordered' : 'assigned');
         const thresholdCell = can('procurement:write')
           ? '<div style="display:flex;gap:6px;align-items:center;">' +
               '<input type="number" min="0" step="1" value="' + esc(r.threshold_qty == null ? 5 : r.threshold_qty) +
@@ -1971,8 +2840,7 @@
               '<button class="btn" data-save-threshold="' + esc(r.category_id) + '" data-threshold-label="' + esc(catLabel(r)) + '">Save</button></div>'
           : esc(r.threshold_qty == null ? 5 : r.threshold_qty);
         return '<tr><td>' + esc(catLabel(r)) + '</td><td class="mono">' + esc(r.current_stock) + '</td><td>' + thresholdCell +
-          '</td><td><span class="badge badge-' + esc(r.threshold_status) +
-          '" style="background:transparent;border:1px solid currentColor;color:var(--' + tCls + ',var(--muted))">' +
+          '</td><td><span class="badge badge-' + esc(r.threshold_status) + '">' +
           esc(r.threshold_status) + '</span></td><td class="mono">' + esc(r.open_alerts) + '</td><td class="mono">' + fmtDate(r.latest_alert_date) + '</td></tr>';
       }), 6, 'No procurement data yet.');
 
